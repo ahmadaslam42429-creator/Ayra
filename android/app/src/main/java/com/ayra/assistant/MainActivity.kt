@@ -11,6 +11,8 @@ import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.webkit.WebView
+import android.webkit.WebChromeClient
+import android.webkit.ConsoleMessage
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.webkit.WebViewAssetLoader
@@ -63,6 +65,8 @@ private data class ChatLine(val text: String, val fromUser: Boolean)
 @Composable
 private fun AyraApp() {
     val context = LocalContext.current
+    val httpClient = remember { OkHttpClient() }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val prefs = remember { context.getSharedPreferences("ayra", 0) }
     var language by remember { mutableStateOf(prefs.getString("language", "English") ?: "English") }
     var showSettings by remember { mutableStateOf(false) }
@@ -155,21 +159,64 @@ private fun AyraApp() {
     fun sendMessage(message: String) {
         if (message.isBlank() || busy) return
         if (handleDeviceCommand(message)) { input = ""; return }
-        history.add(ChatLine(message, true))
         input = ""
-        val q = message.lowercase(Locale.ROOT)
-        val answer = when {
-            q.contains("hello") || q.contains("hi") || q.contains("salam") || q.contains("السلام") || q.contains("ہیلو") || q.contains("नमस्ते") ->
-                if (language == "Urdu") "السلام علیکم! میں آئرہ ہوں۔ آپ کی کیا مدد کر سکتی ہوں؟" else if (language == "Hindi") "नमस्ते! मैं आयरा हूँ। मैं आपकी क्या मदद कर सकती हूँ?" else "Hello! I'm AYRA. How can I help you?"
-            q.contains("your name") || q.contains("تمہارا نام") || q.contains("तुम्हारा नाम") -> "میرا نام AYRA ہے۔"
-            q.contains("time") || q.contains("وقت") || q.contains("समय") -> "آپ کے فون کا موجودہ وقت معلوم کرنے کے لیے گھڑی کھولیں۔"
-            q.contains("date") || q.contains("تاریخ") || q.contains("तारीख") -> "آج کی تاریخ آپ کے فون کے کیلنڈر میں دیکھی جا سکتی ہے۔"
-            q.contains("thank") || q.contains("شکریہ") || q.contains("धन्यवाद") -> "آپ کا خیرمقدم ہے! میں مدد کے لیے حاضر ہوں۔"
-            else -> if (language == "Urdu") "میں ابھی آف لائن موڈ میں ہوں، اس لیے عام AI سوالات کا جواب نہیں دے سکتی۔ آپ مجھے Wi-Fi، Bluetooth، الارم، فون، میسجز، کیلنڈر یا سیٹنگز کھولنے کا کہہ سکتے ہیں۔" else if (language == "Hindi") "मैं अभी ऑफलाइन मोड में हूँ, इसलिए सामान्य AI सवालों का जवाब नहीं दे सकती। आप मुझसे Wi-Fi, Bluetooth, अलार्म, फोन, मैसेज, कैलेंडर या सेटिंग्स खोलने को कह सकते हैं।" else "I'm in offline mode, so I can't answer general AI questions yet. I can open Wi-Fi, Bluetooth, alarms, phone, messages, calendar, browser and device settings."
-        }
-        history.add(ChatLine(answer, false))
+        history.add(ChatLine(message, true))
         persist()
-        if (speakReplies) tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "ayra-reply")
+        busy = true
+
+        val requestMessages = JSONArray()
+        val languageInstruction = when (language) {
+            "Urdu" -> "Reply in natural Urdu script."
+            "Hindi" -> "Reply in natural Hindi using Devanagari."
+            else -> "Reply in clear English."
+        }
+        requestMessages.put(JSONObject()
+            .put("role", "system")
+            .put("content", "You are AYRA, a helpful friendly AI companion. $languageInstruction Keep answers concise and useful."))
+        history.takeLast(14).forEach { line ->
+            requestMessages.put(JSONObject()
+                .put("role", if (line.fromUser) "user" else "assistant")
+                .put("content", line.text))
+        }
+        val payload = JSONObject()
+            .put("model", "Qwen3.8-27B")
+            .put("messages", requestMessages)
+            .put("max_tokens", 900)
+            .put("temperature", 0.6)
+
+        thread {
+            val answer = try {
+                val request = Request.Builder()
+                    .url("https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions")
+                    .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                    .build()
+                httpClient.newCall(request).execute().use { response ->
+                    val responseText = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        throw IllegalStateException(when (response.code) {
+                            429 -> "AI server is busy. Please wait a minute and try again."
+                            else -> "Online AI error (${response.code}). Please try again."
+                        })
+                    }
+                    val content = JSONObject(responseText)
+                        .getJSONArray("choices")
+                        .getJSONObject(0)
+                        .getJSONObject("message")
+                        .optString("content")
+                        .trim()
+                    if (content.isBlank()) throw IllegalStateException("The AI server returned an empty reply.")
+                    content
+                }
+            } catch (error: Exception) {
+                "I couldn't connect to the online AI service. Please check your internet and try again. (${error.message ?: "connection error"})"
+            }
+            mainHandler.post {
+                busy = false
+                history.add(ChatLine(answer, false))
+                persist()
+                if (speakReplies) tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "ayra-reply")
+            }
+        }
     }
 
     val speechLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -316,13 +363,26 @@ private fun AyraApp() {
                             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(viewContext))
                             .build()
                         WebView(viewContext).apply {
+                            setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
                             settings.allowFileAccess = false
                             settings.allowContentAccess = false
+                            settings.mediaPlaybackRequiresUserGesture = false
+                            webChromeClient = object : WebChromeClient() {
+                                override fun onConsoleMessage(message: ConsoleMessage): Boolean {
+                                    if (message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                                        liveStatus = "3D avatar: ${message.message().take(100)}"
+                                    }
+                                    return true
+                                }
+                            }
                             webViewClient = object : WebViewClientCompat() {
                                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                                     return assetLoader.shouldInterceptRequest(request.url)
+                                }
+                                override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
+                                    if (request.isForMainFrame) liveStatus = "3D avatar page failed to load: ${error.description}"
                                 }
                             }
                             loadUrl("https://appassets.androidplatform.net/assets/avatar.html")
@@ -388,7 +448,7 @@ private fun AyraApp() {
                                 Text("Listens only while this app is open; say “Hey AYRA”.", style = MaterialTheme.typography.bodySmall, color = Color.LightGray)
                             }
                         }
-                        Text("Your key and chat history are stored on this device.", style = MaterialTheme.typography.bodySmall)
+                        Text("Online messages are sent to OVHcloud AI to generate replies. Chat history is stored on this device.", style = MaterialTheme.typography.bodySmall)
                     }
                 },
                 confirmButton = { TextButton(onClick = {
