@@ -17,6 +17,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
+import androidx.webkit.WebResourceErrorCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -381,7 +382,7 @@ private fun AyraApp() {
                                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                                     return assetLoader.shouldInterceptRequest(request.url)
                                 }
-                                override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
+                                override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceErrorCompat) {
                                     if (request.isForMainFrame) liveStatus = "3D avatar page failed to load: ${error.description}"
                                 }
                             }
