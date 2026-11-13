@@ -5,6 +5,10 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.speech.RecognitionListener
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.webkit.WebView
 import android.webkit.WebResourceRequest
@@ -68,6 +72,7 @@ private fun AyraApp() {
     var speakReplies by remember { mutableStateOf(prefs.getBoolean("speak", true)) }
     var useGoogleSearch by remember { mutableStateOf(prefs.getBoolean("google_search", true)) }
     var showDeviceTools by remember { mutableStateOf(false) }
+    var wakeWordEnabled by remember { mutableStateOf(prefs.getBoolean("wake_word", false)) }
     val history = remember {
         mutableStateListOf<ChatLine>().apply {
             val raw = prefs.getString("history", "[]") ?: "[]"
@@ -194,6 +199,7 @@ private fun AyraApp() {
         val session = GeminiLiveSession(
             apiKey = apiKey,
             language = language,
+            useGoogleSearch = useGoogleSearch,
             onStatus = { status -> (context as? ComponentActivity)?.runOnUiThread {
                 liveStatus = status
                 avatarTalking = status.contains("speaking", ignoreCase = true)
@@ -219,6 +225,7 @@ private fun AyraApp() {
     }
 
     fun startLive() {
+        wakeWordEnabled = false
         if (apiKey.isBlank()) {
             showSettings = true
             liveStatus = "Add your Gemini API key to start Live Voice."
@@ -234,6 +241,60 @@ private fun AyraApp() {
     DisposableEffect(liveSession) {
         onDispose { liveSession?.stop() }
     }
+
+    val wakePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        wakeWordEnabled = granted
+    }
+
+    DisposableEffect(wakeWordEnabled, liveSession, language) {
+        if (!wakeWordEnabled || liveSession != null || !SpeechRecognizer.isRecognitionAvailable(context)) {
+            onDispose { }
+        } else {
+            val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+            val handler = Handler(Looper.getMainLooper())
+            val listenIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            }
+            fun restartListening() {
+                if (wakeWordEnabled && liveSession == null) {
+                    handler.postDelayed({ runCatching { recognizer.startListening(listenIntent) } }, 650)
+                }
+            }
+            fun checkWakePhrase(bundle: Bundle?): Boolean {
+                val phrases = bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
+                val heard = phrases.joinToString(" ").lowercase(Locale.ROOT)
+                    .replace("-", " ").replace(",", " ")
+                if (heard.contains("hey ayra") || heard.contains("hey ira") || heard.contains("hey aira")) {
+                    wakeWordEnabled = false
+                    runCatching { recognizer.cancel() }
+                    startLive()
+                    return true
+                }
+                return false
+            }
+            recognizer.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() { restartListening() }
+                override fun onError(error: Int) { restartListening() }
+                override fun onResults(results: Bundle?) { if (!checkWakePhrase(results)) restartListening() }
+                override fun onPartialResults(partialResults: Bundle?) { checkWakePhrase(partialResults) }
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+            restartListening()
+            onDispose {
+                handler.removeCallbacksAndMessages(null)
+                runCatching { recognizer.stopListening(); recognizer.cancel(); recognizer.destroy() }
+            }
+        }
+    }
+
 
     MaterialTheme(colorScheme = darkColorScheme(
         primary = Color(0xFF65E7F2), secondary = Color(0xFFB68CFF),
@@ -353,11 +414,25 @@ private fun AyraApp() {
                             Checkbox(checked = useGoogleSearch, onCheckedChange = { useGoogleSearch = it })
                             Text("Search the web with Google")
                         }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = wakeWordEnabled,
+                                onCheckedChange = { enabled ->
+                                    if (enabled && ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                                        wakePermission.launch(Manifest.permission.RECORD_AUDIO)
+                                    } else wakeWordEnabled = enabled
+                                }
+                            )
+                            Column {
+                                Text("Hey AYRA wake word")
+                                Text("Listens only while this app is open; say “Hey AYRA”.", style = MaterialTheme.typography.bodySmall, color = Color.LightGray)
+                            }
+                        }
                         Text("Your key and chat history are stored on this device.", style = MaterialTheme.typography.bodySmall)
                     }
                 },
                 confirmButton = { TextButton(onClick = {
-                    prefs.edit().putString("gemini_key", apiKey).putString("language", language).putBoolean("speak", speakReplies).putBoolean("google_search", useGoogleSearch).apply()
+                    prefs.edit().putString("gemini_key", apiKey).putString("language", language).putBoolean("speak", speakReplies).putBoolean("google_search", useGoogleSearch).putBoolean("wake_word", wakeWordEnabled).apply()
                     tts?.language = when (language) {
                         "Urdu" -> Locale("ur", "PK")
                         "Hindi" -> Locale("hi", "IN")
