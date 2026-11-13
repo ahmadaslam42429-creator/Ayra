@@ -23,6 +23,7 @@ import kotlin.concurrent.thread
 class GeminiLiveSession(
     private val apiKey: String,
     private val language: String,
+    private val useGoogleSearch: Boolean = true,
     private val onStatus: (String) -> Unit,
     private val onTranscript: (String, Boolean) -> Unit
 ) {
@@ -70,7 +71,12 @@ class GeminiLiveSession(
                                 "You are AYRA, a friendly personal AI assistant. Speak naturally and concisely. Reply in $language unless the user asks for another language."
                             ))))
                         .put("inputAudioTranscription", JSONObject())
-                        .put("outputAudioTranscription", JSONObject()))
+                        .put("outputAudioTranscription", JSONObject())
+                        .also { config ->
+                            if (useGoogleSearch) {
+                                config.put("tools", org.json.JSONArray().put(JSONObject().put("googleSearch", JSONObject())))
+                            }
+                        })
                 webSocket.send(setup.toString())
             }
 
