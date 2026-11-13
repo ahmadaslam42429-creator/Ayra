@@ -91,6 +91,7 @@ private fun AyraApp() {
     }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var liveStatus by remember { mutableStateOf("Live voice is off") }
+    var liveVoiceActive by remember { mutableStateOf(false) }
     var screenContext by remember { mutableStateOf("") }
     var avatarTalking by remember { mutableStateOf(false) }
     DisposableEffect(Unit) {
@@ -267,26 +268,31 @@ private fun AyraApp() {
 
     val livePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, when (language) { "Urdu" -> "ur-PK"; "Hindi" -> "hi-IN"; else -> "en-US" })
-            }
-            runCatching { speechLauncher.launch(intent) }
-        } else liveStatus = "Microphone permission is required for voice input."
+            val serviceIntent = Intent(context, AyraLiveVoiceService::class.java)
+                .setAction(AyraLiveVoiceService.ACTION_START)
+                .putExtra("language", language)
+            runCatching { ContextCompat.startForegroundService(context, serviceIntent) }
+                .onSuccess { liveVoiceActive = true; liveStatus = "Live voice is active in the background." }
+                .onFailure { liveStatus = "Could not start live voice: ${it.message}" }
+        } else liveStatus = "Microphone permission is required for live voice."
     }
 
     fun startLive() {
         wakeWordEnabled = false
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, when (language) { "Urdu" -> "ur-PK"; "Hindi" -> "hi-IN"; else -> "en-US" })
-                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to AYRA")
-            }
-            runCatching { speechLauncher.launch(intent) }
-        } else {
-            livePermission.launch(Manifest.permission.RECORD_AUDIO)
-        }
+            val serviceIntent = Intent(context, AyraLiveVoiceService::class.java)
+                .setAction(AyraLiveVoiceService.ACTION_START)
+                .putExtra("language", language)
+            runCatching { ContextCompat.startForegroundService(context, serviceIntent) }
+                .onSuccess { liveVoiceActive = true; liveStatus = "Live voice is active in the background." }
+                .onFailure { liveStatus = "Could not start live voice: ${it.message}" }
+        } else livePermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    fun stopLive() {
+        runCatching { context.startService(Intent(context, AyraLiveVoiceService::class.java).setAction(AyraLiveVoiceService.ACTION_STOP)) }
+        liveVoiceActive = false
+        liveStatus = "Live voice is off"
     }
 
     val wakePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -353,9 +359,9 @@ private fun AyraApp() {
                     title = { Column { Text("AYRA", color = Color(0xFF65E7F2)); Text("Your AI companion", style = MaterialTheme.typography.labelSmall) } },
                     actions = {
                         TextButton(onClick = { showDeviceTools = true }) { Text("Device", color = Color(0xFF65E7F2)) }
-                        TextButton(onClick = { liveStatus = "Use the microphone button for voice input" }) {
-                            Icon(Icons.Default.HeadsetMic, "Voice input", tint = Color.LightGray)
-                            Text("VOICE", color = Color.LightGray, style = MaterialTheme.typography.labelSmall)
+                        TextButton(onClick = { if (liveVoiceActive) stopLive() else startLive() }) {
+                            Icon(Icons.Default.HeadsetMic, "Live voice", tint = if (liveVoiceActive) Color(0xFF65E7F2) else Color.LightGray)
+                            Text(if (liveVoiceActive) "STOP LIVE" else "LIVE VOICE", color = if (liveVoiceActive) Color(0xFF65E7F2) else Color.LightGray, style = MaterialTheme.typography.labelSmall)
                         }
                         IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, "Settings") }
                     },
