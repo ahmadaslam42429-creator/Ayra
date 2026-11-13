@@ -29,7 +29,7 @@ class GeminiLiveSession(
     companion object {
         private const val INPUT_RATE = 16_000
         private const val OUTPUT_RATE = 24_000
-        private const val MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
+        private const val MODEL = "gemini-3.1-flash-live-preview"
         private const val ENDPOINT =
             "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
     }
@@ -68,7 +68,9 @@ class GeminiLiveSession(
                             .put("parts", org.json.JSONArray().put(JSONObject().put(
                                 "text",
                                 "You are AYRA, a friendly personal AI assistant. Speak naturally and concisely. Reply in $language unless the user asks for another language."
-                            )))))
+                            ))))
+                        .put("inputAudioTranscription", JSONObject())
+                        .put("outputAudioTranscription", JSONObject()))
                 webSocket.send(setup.toString())
             }
 
@@ -81,6 +83,9 @@ class GeminiLiveSession(
                         startMicrophone(webSocket)
                     }
                     val serverContent = root.optJSONObject("serverContent")
+                    if (serverContent?.optBoolean("interrupted") == true) {
+                        runCatching { player?.pause(); player?.flush(); player?.play() }
+                    }
                     val inputText = serverContent?.optJSONObject("inputTranscription")?.optString("text")
                     if (!inputText.isNullOrBlank()) onTranscript(inputText, true)
                     val outputText = serverContent?.optJSONObject("outputTranscription")?.optString("text")
