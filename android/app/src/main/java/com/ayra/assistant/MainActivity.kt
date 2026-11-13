@@ -86,7 +86,7 @@ private fun AyraApp() {
     DisposableEffect(Unit) {
         val engine = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                engine.language = when (language) {
+                tts?.language = when (language) {
                     "Urdu" -> Locale("ur", "PK")
                     "Hindi" -> Locale("hi", "IN")
                     else -> Locale("en", "US")
