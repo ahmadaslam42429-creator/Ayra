@@ -184,8 +184,27 @@ private fun AyraApp() {
                 OkHttpClient().newCall(request).execute().use { response ->
                     val text = response.body?.string().orEmpty()
                     if (!response.isSuccessful) error("Gemini API error (${response.code}): $text")
-                    JSONObject(text).getJSONArray("candidates").getJSONObject(0)
-                        .getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")
+                    val candidate = JSONObject(text).getJSONArray("candidates").getJSONObject(0)
+                    val answerText = buildString {
+                        val parts = candidate.getJSONObject("content").getJSONArray("parts")
+                        for (i in 0 until parts.length()) {
+                            val partText = parts.optJSONObject(i)?.optString("text").orEmpty()
+                            if (partText.isNotBlank()) {
+                                if (isNotEmpty()) append("\\n")
+                                append(partText)
+                            }
+                        }
+                    }
+                    val sources = candidate.optJSONObject("groundingMetadata")?.optJSONArray("groundingChunks")
+                    val sourceLines = buildList {
+                        if (sources != null) for (i in 0 until sources.length()) {
+                            val web = sources.optJSONObject(i)?.optJSONObject("web") ?: continue
+                            val title = web.optString("title", "Source")
+                            val uri = web.optString("uri")
+                            if (uri.startsWith("https://") || uri.startsWith("http://")) add("• $title — $uri")
+                        }
+                    }.distinct()
+                    answerText + if (sourceLines.isNotEmpty()) "\\n\\nSources:\\n" + sourceLines.joinToString("\\n") else ""
                 }
             }.getOrElse { "I couldn't connect to Gemini: ${it.message ?: "Unknown error"}" }
             (context as? ComponentActivity)?.runOnUiThread {
