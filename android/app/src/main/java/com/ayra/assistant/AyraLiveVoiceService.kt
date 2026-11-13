@@ -205,6 +205,19 @@ class AyraLiveVoiceService : Service() {
         processing = true
         saveLine(text, true)
 
+        val commandReply = runDeviceCommand(text)
+        if (commandReply != null) {
+            saveLine(commandReply, false)
+            processing = false
+            speaking = true
+            val result = tts?.speak(commandReply, TextToSpeech.QUEUE_FLUSH, null, "ayra-live-command")
+            if (result == TextToSpeech.ERROR || tts == null) {
+                speaking = false
+                scheduleListen(400)
+            }
+            return
+        }
+
         val prefs = getSharedPreferences("ayra", MODE_PRIVATE)
         val history = runCatching { JSONArray(prefs.getString("history", "[]") ?: "[]") }
             .getOrElse { JSONArray() }
@@ -257,6 +270,57 @@ class AyraLiveVoiceService : Service() {
                     scheduleListen(500)
                 }
             }
+        }
+    }
+
+    private fun runDeviceCommand(spoken: String): String? {
+        val command = spoken.lowercase(Locale.ROOT).trim()
+        val quickActions = listOf(
+            listOf("open wifi", "open wi-fi", "wifi settings", "wi-fi settings", "وائی فائی کھولو", "وائی فائی سیٹنگز") to Intent(android.provider.Settings.ACTION_WIFI_SETTINGS),
+            listOf("open bluetooth", "bluetooth settings", "بلوٹوتھ کھولو", "بلوٹوتھ سیٹنگز") to Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS),
+            listOf("open settings", "device settings", "سیٹنگز کھولو", "ترتیبات کھولو", "सेटिंग्स खोलो") to Intent(android.provider.Settings.ACTION_SETTINGS),
+            listOf("open browser", "browser kholo", "براوزر کھولو", "ब्राउज़र खोलो") to Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com")),
+            listOf("open contacts", "contacts kholo", "کانٹیکٹس کھولو", "संपर्क खोलो") to Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CONTACTS),
+            listOf("open messages", "open sms", "messages kholo", "میسجز کھولو", "मैसेज खोलो") to Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MESSAGING),
+            listOf("open calendar", "calendar kholo", "کیلنڈر کھولو", "कैलेंडर खोलो") to Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CALENDAR),
+            listOf("open maps", "maps kholo", "نقشہ کھولو", "मैप खोलो") to Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MAPS),
+            listOf("open music", "music kholo", "میوزک کھولو", "म्यूजिक खोलो") to Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MUSIC)
+        )
+        val selected = quickActions.firstOrNull { entry -> entry.first.any { command.contains(it) } }?.second
+        if (selected != null) {
+            val opened = runCatching { selected.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(selected) }.isSuccess
+            if (opened) return when (language) {
+                "Urdu" -> "جی، مطلوبہ ایپ یا سیٹنگ کھول دی ہے۔"
+                "Hindi" -> "जी, अनुरोधित ऐप या सेटिंग खोल दी है।"
+                else -> "Done. I've opened it."
+            }
+        }
+
+        val prefixes = listOf("open ", "launch ", "start ", "کھولو ", "کھولیں ", "खोलो ")
+        val suffixes = listOf(" kholo", " khol do", " کھولو", " کھول دو", " खोलो", " खोल दो")
+        var appName = prefixes.firstNotNullOfOrNull { prefix ->
+            if (command.startsWith(prefix)) spoken.substring(prefix.length).trim() else null
+        }
+        if (appName == null) {
+            val suffix = suffixes.firstOrNull { command.endsWith(it) }
+            if (suffix != null) appName = spoken.dropLast(suffix.length).trim()
+        }
+        if (appName.isNullOrBlank()) return null
+        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val match = packageManager.queryIntentActivities(launcher, 0).firstOrNull {
+            it.loadLabel(packageManager).toString().trim().equals(appName, ignoreCase = true)
+        } ?: packageManager.queryIntentActivities(launcher, 0).firstOrNull {
+            it.loadLabel(packageManager).toString().contains(appName, ignoreCase = true)
+        } ?: return null
+        val launch = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            .setClassName(match.activityInfo.packageName, match.activityInfo.name)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val opened = runCatching { startActivity(launch) }.isSuccess
+        if (!opened) return null
+        return when (language) {
+            "Urdu" -> "جی، $appName کھول رہا ہوں۔"
+            "Hindi" -> "जी, $appName खोल रहा हूँ।"
+            else -> "Opening $appName."
         }
     }
 
