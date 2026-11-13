@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -29,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import org.json.JSONArray
 import org.json.JSONObject
@@ -227,6 +230,18 @@ private fun AyraApp() {
                 if (liveSession != null || liveStatus != "Live voice is off") {
                     Text(liveStatus, Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp), color = Color(0xFF65E7F2), style = MaterialTheme.typography.labelMedium)
                 }
+                AndroidView(
+                    factory = { viewContext ->
+                        WebView(viewContext).apply {
+                            settings.javaScriptEnabled = true
+                            settings.domStorageEnabled = true
+                            settings.allowFileAccess = true
+                            webViewClient = WebViewClient()
+                            loadUrl("file:///android_asset/avatar.html")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(245.dp)
+                )
                 if (history.isEmpty()) {
                     Spacer(Modifier.height(56.dp))
                     Text("Hello, I'm AYRA", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF65E7F2))
