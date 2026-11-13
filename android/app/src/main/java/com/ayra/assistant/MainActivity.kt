@@ -97,8 +97,38 @@ private fun AyraApp() {
         prefs.edit().putString("history", arr.toString()).apply()
     }
 
+    fun handleDeviceCommand(message: String): Boolean {
+        val command = message.lowercase(Locale.ROOT)
+        val target: Intent? = when {
+            listOf("wifi settings", "wi-fi settings", "open wifi", "open wi-fi").any { command.contains(it) } ->
+                Intent(android.provider.Settings.ACTION_WIFI_SETTINGS)
+            listOf("bluetooth settings", "open bluetooth").any { command.contains(it) } ->
+                Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)
+            listOf("display settings", "brightness settings", "open display").any { command.contains(it) } ->
+                Intent(android.provider.Settings.ACTION_DISPLAY_SETTINGS)
+            listOf("sound settings", "volume settings", "open sound").any { command.contains(it) } ->
+                Intent(android.provider.Settings.ACTION_SOUND_SETTINGS)
+            listOf("open alarms", "show alarms", "alarm clock").any { command.contains(it) } ->
+                Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS)
+            listOf("open dialer", "phone dialer", "open phone").any { command.contains(it) } ->
+                Intent(Intent.ACTION_DIAL)
+            listOf("app permissions", "app settings").any { command.contains(it) } ->
+                Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    .apply { data = android.net.Uri.parse("package:" + context.packageName) }
+            command.contains("device settings") || command == "open settings" ->
+                Intent(android.provider.Settings.ACTION_SETTINGS)
+            else -> null
+        } ?: return false
+        history.add(ChatLine(message, true))
+        val launched = runCatching { context.startActivity(target) }.isSuccess
+        history.add(ChatLine(if (launched) "Opening the requested Android control. You can confirm or change it in Android." else "Android could not open that control on this device.", false))
+        persist()
+        return true
+    }
+
     fun sendMessage(message: String) {
         if (message.isBlank() || busy) return
+        if (handleDeviceCommand(message)) { input = ""; return }
         history.add(ChatLine(message, true))
         persist()
         input = ""
@@ -160,8 +190,10 @@ private fun AyraApp() {
             onStatus = { status -> (context as? ComponentActivity)?.runOnUiThread { liveStatus = status } },
             onTranscript = { text, fromUser ->
                 (context as? ComponentActivity)?.runOnUiThread {
-                    history.add(ChatLine(text, fromUser))
-                    persist()
+                    if (!(fromUser && handleDeviceCommand(text))) {
+                        history.add(ChatLine(text, fromUser))
+                        persist()
+                    }
                 }
             }
         )
