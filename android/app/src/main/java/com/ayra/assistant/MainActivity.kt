@@ -64,7 +64,6 @@ private data class ChatLine(val text: String, val fromUser: Boolean)
 private fun AyraApp() {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("ayra", 0) }
-    var apiKey by remember { mutableStateOf(prefs.getString("gemini_key", "") ?: "") }
     var language by remember { mutableStateOf(prefs.getString("language", "English") ?: "English") }
     var showSettings by remember { mutableStateOf(false) }
     var input by remember { mutableStateOf("") }
@@ -86,7 +85,6 @@ private fun AyraApp() {
         }
     }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
-    var liveSession by remember { mutableStateOf<GeminiLiveSession?>(null) }
     var liveStatus by remember { mutableStateOf("Live voice is off") }
     var avatarTalking by remember { mutableStateOf(false) }
     DisposableEffect(Unit) {
@@ -158,87 +156,20 @@ private fun AyraApp() {
         if (message.isBlank() || busy) return
         if (handleDeviceCommand(message)) { input = ""; return }
         history.add(ChatLine(message, true))
-        persist()
         input = ""
-        if (apiKey.isBlank()) {
-            history.add(ChatLine("Please add your Gemini API key in Settings to start chatting.", false))
-            persist()
-            return
+        val q = message.lowercase(Locale.ROOT)
+        val answer = when {
+            q.contains("hello") || q.contains("hi") || q.contains("salam") || q.contains("السلام") || q.contains("ہیلو") || q.contains("नमस्ते") ->
+                if (language == "Urdu") "السلام علیکم! میں آئرہ ہوں۔ آپ کی کیا مدد کر سکتی ہوں؟" else if (language == "Hindi") "नमस्ते! मैं आयरा हूँ। मैं आपकी क्या मदद कर सकती हूँ?" else "Hello! I'm AYRA. How can I help you?"
+            q.contains("your name") || q.contains("تمہارا نام") || q.contains("तुम्हारा नाम") -> "میرا نام AYRA ہے۔"
+            q.contains("time") || q.contains("وقت") || q.contains("समय") -> "آپ کے فون کا موجودہ وقت معلوم کرنے کے لیے گھڑی کھولیں۔"
+            q.contains("date") || q.contains("تاریخ") || q.contains("तारीख") -> "آج کی تاریخ آپ کے فون کے کیلنڈر میں دیکھی جا سکتی ہے۔"
+            q.contains("thank") || q.contains("شکریہ") || q.contains("धन्यवाद") -> "آپ کا خیرمقدم ہے! میں مدد کے لیے حاضر ہوں۔"
+            else -> if (language == "Urdu") "میں ابھی آف لائن موڈ میں ہوں، اس لیے عام AI سوالات کا جواب نہیں دے سکتی۔ آپ مجھے Wi-Fi، Bluetooth، الارم، فون، میسجز، کیلنڈر یا سیٹنگز کھولنے کا کہہ سکتے ہیں۔" else if (language == "Hindi") "मैं अभी ऑफलाइन मोड में हूँ, इसलिए सामान्य AI सवालों का जवाब नहीं दे सकती। आप मुझसे Wi-Fi, Bluetooth, अलार्म, फोन, मैसेज, कैलेंडर या सेटिंग्स खोलने को कह सकते हैं।" else "I'm in offline mode, so I can't answer general AI questions yet. I can open Wi-Fi, Bluetooth, alarms, phone, messages, calendar, browser and device settings."
         }
-        busy = true
-        val searchEnabled = useGoogleSearch
-        val prompt = buildString {
-            append("You are AYRA, a helpful friendly AI assistant. Reply in $language unless the user requests another language.\n")
-            history.takeLast(12).forEach { append(if (it.fromUser) "User: " else "AYRA: "); append(it.text); append("\n") }
-        }
-        thread {
-            val answer = runCatching {
-                val payload = JSONObject()
-                    .put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
-                if (searchEnabled) {
-                    payload.put("tools", JSONArray().put(JSONObject().put("googleSearch", JSONObject())))
-                }
-                val body = payload.toString().toRequestBody("application/json".toMediaType())
-                val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=" + URLEncoder.encode(apiKey, "UTF-8")
-                val request = Request.Builder().url(url).post(body).build()
-                val client = OkHttpClient.Builder()
-                    .connectTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(90, java.util.concurrent.TimeUnit.SECONDS)
-                    .callTimeout(100, java.util.concurrent.TimeUnit.SECONDS)
-                    .build()
-                var attempt = 0
-                var resultText: String? = null
-                while (attempt < 3 && resultText == null) {
-                    attempt++
-                    val response = client.newCall(request).execute()
-                    val statusCode = response.code
-                    val retryAfter = response.header("Retry-After")?.toLongOrNull()
-                    val responseText = response.body?.string().orEmpty()
-                    response.close()
-                    if (statusCode in 200..299) {
-                        resultText = responseText
-                    } else if (statusCode == 429 && attempt < 3) {
-                        val delaySeconds = (retryAfter ?: (1L shl attempt)).coerceIn(1L, 30L)
-                        Thread.sleep(delaySeconds * 1000L)
-                    } else if (statusCode == 429) {
-                        val detail = runCatching {
-                            JSONObject(responseText).optJSONObject("error")?.optString("message").orEmpty()
-                        }.getOrDefault("")
-                        error("Gemini quota/rate limit (429). ${detail.ifBlank { "Wait for your Gemini quota to reset or enable billing/increase the API limit in Google AI Studio." }}")
-                    } else {
-                        error("Gemini API error ($statusCode): $responseText")
-                    }
-                }
-                val text = resultText ?: error("Gemini did not return a response. Please try again.")
-                    val candidate = JSONObject(text).getJSONArray("candidates").getJSONObject(0)
-                    val answerText = buildString {
-                        val parts = candidate.getJSONObject("content").getJSONArray("parts")
-                        for (i in 0 until parts.length()) {
-                            val partText = parts.optJSONObject(i)?.optString("text").orEmpty()
-                            if (partText.isNotBlank()) {
-                                if (isNotEmpty()) append("\\n")
-                                append(partText)
-                            }
-                        }
-                    }
-                    val sources = candidate.optJSONObject("groundingMetadata")?.optJSONArray("groundingChunks")
-                    val sourceLines = buildList {
-                        if (sources != null) for (i in 0 until sources.length()) {
-                            val web = sources.optJSONObject(i)?.optJSONObject("web") ?: continue
-                            val title = web.optString("title", "Source")
-                            val uri = web.optString("uri")
-                            if (uri.startsWith("https://") || uri.startsWith("http://")) add("• $title — $uri")
-                        }
-                    }.distinct()
-                    answerText + if (sourceLines.isNotEmpty()) "\\n\\nSources:\\n" + sourceLines.joinToString("\\n") else ""
-            }.getOrElse { "I couldn't connect to Gemini: ${it.message ?: "Unknown error"}" }
-            (context as? ComponentActivity)?.runOnUiThread {
-                history.add(ChatLine(answer, false))
-                persist()
-                busy = false
-                if (speakReplies) tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "ayra-reply")
-            }
-        }
+        history.add(ChatLine(answer, false))
+        persist()
+        if (speakReplies) tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "ayra-reply")
     }
 
     val speechLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -255,59 +186,36 @@ private fun AyraApp() {
         }
     }
 
-    fun createLiveSession() {
-        val session = GeminiLiveSession(
-            apiKey = apiKey,
-            language = language,
-            useGoogleSearch = useGoogleSearch,
-            onStatus = { status -> (context as? ComponentActivity)?.runOnUiThread {
-                liveStatus = status
-                avatarTalking = status.contains("speaking", ignoreCase = true)
-                if (status.contains("failed", ignoreCase = true) || status.contains("disconnected", ignoreCase = true) || status.contains("error", ignoreCase = true)) {
-                    liveSession = null
-                }
-            } },
-            onTranscript = { text, fromUser ->
-                (context as? ComponentActivity)?.runOnUiThread {
-                    if (!(fromUser && handleDeviceCommand(text))) {
-                        history.add(ChatLine(text, fromUser))
-                        persist()
-                    }
-                }
-            }
-        )
-        liveSession = session
-        session.start()
-    }
-
     val livePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) createLiveSession() else liveStatus = "Microphone permission is required for Live Voice."
+        if (granted) {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, when (language) { "Urdu" -> "ur-PK"; "Hindi" -> "hi-IN"; else -> "en-US" })
+            }
+            runCatching { speechLauncher.launch(intent) }
+        } else liveStatus = "Microphone permission is required for voice input."
     }
 
     fun startLive() {
         wakeWordEnabled = false
-        if (apiKey.isBlank()) {
-            showSettings = true
-            liveStatus = "Add your Gemini API key to start Live Voice."
-            return
-        }
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            Handler(Looper.getMainLooper()).postDelayed({ createLiveSession() }, 700)
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, when (language) { "Urdu" -> "ur-PK"; "Hindi" -> "hi-IN"; else -> "en-US" })
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to AYRA")
+            }
+            runCatching { speechLauncher.launch(intent) }
         } else {
             livePermission.launch(Manifest.permission.RECORD_AUDIO)
         }
-    }
-
-    DisposableEffect(liveSession) {
-        onDispose { liveSession?.stop() }
     }
 
     val wakePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         wakeWordEnabled = granted
     }
 
-    DisposableEffect(wakeWordEnabled, liveSession, language) {
-        if (!wakeWordEnabled || liveSession != null || !SpeechRecognizer.isRecognitionAvailable(context)) {
+    DisposableEffect(wakeWordEnabled, language) {
+        if (!wakeWordEnabled || !SpeechRecognizer.isRecognitionAvailable(context)) {
             onDispose { }
         } else {
             val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
@@ -320,7 +228,7 @@ private fun AyraApp() {
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
             }
             fun restartListening() {
-                if (wakeWordEnabled && liveSession == null) {
+                if (wakeWordEnabled) {
                     handler.postDelayed({ runCatching { recognizer.startListening(listenIntent) } }, 650)
                 }
             }
@@ -454,8 +362,6 @@ private fun AyraApp() {
                 title = { Text("AYRA Settings") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Gemini API key")
-                        OutlinedTextField(value = apiKey, onValueChange = { apiKey = it }, visualTransformation = PasswordVisualTransformation(), singleLine = true, placeholder = { Text("Paste API key") })
                         Text("Language")
                         var expanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
@@ -492,7 +398,7 @@ private fun AyraApp() {
                     }
                 },
                 confirmButton = { TextButton(onClick = {
-                    prefs.edit().putString("gemini_key", apiKey).putString("language", language).putBoolean("speak", speakReplies).putBoolean("google_search", useGoogleSearch).putBoolean("wake_word", wakeWordEnabled).apply()
+                    prefs.edit().remove("gemini_key").putString("language", language).putBoolean("speak", speakReplies).putBoolean("google_search", false).putBoolean("wake_word", wakeWordEnabled).apply()
                     tts?.language = when (language) {
                         "Urdu" -> Locale("ur", "PK")
                         "Hindi" -> Locale("hi", "IN")
