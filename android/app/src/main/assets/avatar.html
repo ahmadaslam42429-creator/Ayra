@@ -44,7 +44,18 @@ loader.load('models/blue-pixie.vrm',gltf=>{
 const clock=new THREE.Clock();
 function animate(){
  requestAnimationFrame(animate); const dt=clock.getDelta();
- if(avatar){avatar.update(dt); avatar.scene.rotation.y=Math.PI+Math.sin(clock.elapsedTime*.35)*.10;}
+ if(avatar){
+   avatar.update(dt);
+   avatar.scene.rotation.y=Math.PI+Math.sin(clock.elapsedTime*.35)*.10;
+   avatar.scene.position.y=Math.sin(clock.elapsedTime*1.15)*.025;
+   const head=avatar.humanoid?.getNormalizedBoneNode('head');
+   if(head) head.rotation.z=Math.sin(clock.elapsedTime*.7)*.025;
+   if(avatar.expressionManager){
+     const phase=clock.elapsedTime%4.8;
+     const blink=phase>4.48?Math.sin(((phase-4.48)/.32)*Math.PI):0;
+     avatar.expressionManager.setValue('blink',blink);
+   }
+ }
  renderer.render(scene,camera);
 }
 animate();
