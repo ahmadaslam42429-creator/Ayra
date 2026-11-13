@@ -231,7 +231,6 @@ private fun AyraApp() {
                         }
                     }.distinct()
                     answerText + if (sourceLines.isNotEmpty()) "\\n\\nSources:\\n" + sourceLines.joinToString("\\n") else ""
-                }
             }.getOrElse { "I couldn't connect to Gemini: ${it.message ?: "Unknown error"}" }
             (context as? ComponentActivity)?.runOnUiThread {
                 history.add(ChatLine(answer, false))
