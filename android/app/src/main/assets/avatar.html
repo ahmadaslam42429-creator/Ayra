@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0a1120;color:#a9c7e8;font:14px sans-serif}
+#stage{width:100%;height:100%;display:block}
+#status{position:absolute;left:12px;bottom:8px;font-size:11px;opacity:.8;pointer-events:none}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/","@pixiv/three-vrm":"https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.3.0/lib/three-vrm.module.js"}}
+</script>
+</head>
+<body>
+<canvas id="stage"></canvas><div id="status">AYRA 3D avatar · loading…</div>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+const status=document.getElementById('status');
+const canvas=document.getElementById('stage');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight,false);
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.15;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0a1120);
+const camera=new THREE.PerspectiveCamera(30,innerWidth/innerHeight,.1,100);
+camera.position.set(0,1.35,3.1);
+scene.add(new THREE.HemisphereLight(0xb8dcff,0x26304b,2));
+const key=new THREE.DirectionalLight(0xffffff,2.4); key.position.set(1,3,4); scene.add(key);
+const rim=new THREE.PointLight(0x58d9ff,18,8); rim.position.set(-2,1,1); scene.add(rim);
+let avatar=null;
+const loader=new GLTFLoader(); loader.register(parser=>new VRMLoaderPlugin(parser));
+loader.load('models/blue-pixie.vrm',gltf=>{
+ avatar=gltf.userData.vrm; VRMUtils.removeUnnecessaryVertices(gltf.scene); VRMUtils.removeUnnecessaryJoints(gltf.scene);
+ avatar.scene.rotation.y=Math.PI; scene.add(avatar.scene);
+ status.textContent='AYRA 3D avatar';
+},p=>{if(p.total)status.textContent='Loading avatar '+Math.round(p.loaded/p.total*100)+'%';},e=>{
+ console.error(e); status.textContent='Avatar could not load. Check internet connection.';
+});
+const clock=new THREE.Clock();
+function animate(){
+ requestAnimationFrame(animate); const dt=clock.getDelta();
+ if(avatar){avatar.update(dt); avatar.scene.rotation.y=Math.PI+Math.sin(clock.elapsedTime*.35)*.10;}
+ renderer.render(scene,camera);
+}
+animate();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight,false);});
+</script>
+</body></html>
