@@ -91,6 +91,7 @@ private fun AyraApp() {
     }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var liveStatus by remember { mutableStateOf("Live voice is off") }
+    var screenContext by remember { mutableStateOf("") }
     var avatarTalking by remember { mutableStateOf(false) }
     DisposableEffect(Unit) {
         val engine = TextToSpeech(context) { status ->
@@ -203,7 +204,7 @@ private fun AyraApp() {
         }
         requestMessages.put(JSONObject()
             .put("role", "system")
-            .put("content", "You are AYRA, a helpful friendly AI companion. $languageInstruction Keep answers concise and useful."))
+            .put("content", "You are AYRA, a helpful friendly AI companion. $languageInstruction Keep answers concise and useful. If screen text is supplied, use it only as context for the user’s question; mention when the screen text is insufficient.\n\nVisible screen text (captured by the user-enabled Accessibility service): ${prefs.getString("screen_context", "").orEmpty().take(10000)}"))
         history.takeLast(14).forEach { line ->
             requestMessages.put(JSONObject()
                 .put("role", if (line.fromUser) "user" else "assistant")
