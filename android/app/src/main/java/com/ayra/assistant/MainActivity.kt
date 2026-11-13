@@ -248,7 +248,7 @@ private fun AyraApp() {
             return
         }
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            createLiveSession()
+            Handler(Looper.getMainLooper()).postDelayed({ createLiveSession() }, 700)
         } else {
             livePermission.launch(Manifest.permission.RECORD_AUDIO)
         }
@@ -297,7 +297,7 @@ private fun AyraApp() {
                 override fun onBeginningOfSpeech() {}
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() { restartListening() }
+                override fun onEndOfSpeech() {}
                 override fun onError(error: Int) { restartListening() }
                 override fun onResults(results: Bundle?) { if (!checkWakePhrase(results)) restartListening() }
                 override fun onPartialResults(partialResults: Bundle?) { checkWakePhrase(partialResults) }
