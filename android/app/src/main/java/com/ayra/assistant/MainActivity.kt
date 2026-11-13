@@ -507,7 +507,12 @@ private fun AyraApp() {
                 title = { Text("Android device tools") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("These shortcuts open Android's own controls. Protected actions still require your confirmation.")
+                        Text("Enable AYRA's optional accessibility permission to let it read visible controls, tap buttons and enter text inside apps. Android will show its system permission screen; you can turn it off anytime.")
+                        TextButton(onClick = {
+                            runCatching { context.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                            showDeviceTools = false
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Enable AYRA app control permission") }
+                        Text("AYRA can prepare messages and posts, but will leave Send, Publish, Delete and payment confirmations to you.")
                         val actions = listOf(
                             "Wi-Fi" to android.provider.Settings.ACTION_WIFI_SETTINGS,
                             "Bluetooth" to android.provider.Settings.ACTION_BLUETOOTH_SETTINGS,
