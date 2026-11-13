@@ -14,6 +14,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.core.app.NotificationCompat
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -42,18 +43,21 @@ class AyraLiveVoiceService : Service() {
     }
     private var recognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
-    private var language = "English"
-    private var listening = false
-    private var processing = false
-    private var stopped = false
-    private var lastUserText = ""
+    @Volatile private var language = "English"
+    @Volatile private var listening = false
+    @Volatile private var processing = false
+    @Volatile private var speaking = false
+    @Volatile private var stopped = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             stopSession()
             return START_NOT_STICKY
         }
-        language = intent?.getStringExtra("language") ?: language
+        val prefs = getSharedPreferences("ayra", MODE_PRIVATE)
+        language = intent?.getStringExtra("language")
+            ?: prefs.getString("language", "English")
+            ?: "English"
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
         stopped = false
@@ -64,21 +68,54 @@ class AyraLiveVoiceService : Service() {
         if (tts == null) {
             tts = TextToSpeech(this) { status ->
                 if (status == TextToSpeech.SUCCESS) {
-                    tts?.language = speechLocale()
-                    beginListening()
+                    configureTts()
+                    installTtsListener()
                 }
+                beginListening()
             }
         } else {
-            tts?.language = speechLocale()
+            configureTts()
             beginListening()
         }
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     private fun speechLocale(): Locale = when (language) {
         "Urdu" -> Locale("ur", "PK")
         "Hindi" -> Locale("hi", "IN")
         else -> Locale("en", "US")
+    }
+
+    private fun configureTts() {
+        val engine = tts ?: return
+        val result = engine.setLanguage(speechLocale())
+        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+            engine.setLanguage(Locale.US)
+        }
+    }
+
+    private fun installTtsListener() {
+        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {
+                speaking = true
+            }
+            override fun onDone(utteranceId: String?) {
+                handler.post {
+                    speaking = false
+                    if (!stopped && !processing) scheduleListen(250)
+                }
+            }
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                handler.post {
+                    speaking = false
+                    if (!stopped && !processing) scheduleListen(500)
+                }
+            }
+            override fun onError(utteranceId: String?, errorCode: Int) {
+                onError(utteranceId)
+            }
+        })
     }
 
     private fun createNotificationChannel() {
@@ -94,14 +131,14 @@ class AyraLiveVoiceService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("AYRA live voice is active")
-            .setContentText("AYRA is listening for your voice. Tap Stop to end the session.")
+            .setContentText("AYRA is listening. Tap Stop to end the session.")
             .setOngoing(true)
             .addAction(android.R.drawable.ic_media_pause, "Stop", stopPending)
             .build()
     }
 
     private fun beginListening() {
-        if (stopped || processing || listening) return
+        if (stopped || processing || speaking || listening) return
         if (!SpeechRecognizer.isRecognitionAvailable(this)) return
         runCatching {
             if (recognizer == null) {
@@ -114,59 +151,83 @@ class AyraLiveVoiceService : Service() {
                     override fun onEndOfSpeech() { listening = false }
                     override fun onError(error: Int) {
                         listening = false
-                        if (!stopped && !processing) scheduleListen(900)
+                        if (!stopped && !processing && !speaking) {
+                            // Recreate the recognizer after transient Android speech-service errors.
+                            runCatching { recognizer?.cancel(); recognizer?.destroy() }
+                            recognizer = null
+                            scheduleListen(if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 1400 else 800)
+                        }
                     }
                     override fun onResults(results: android.os.Bundle?) {
                         listening = false
-                        val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty().trim()
-                        if (heard.isNotBlank()) handleUserSpeech(heard) else scheduleListen(500)
+                        val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                            ?.firstOrNull().orEmpty().trim()
+                        if (heard.isNotBlank()) handleUserSpeech(heard) else scheduleListen(350)
                     }
                     override fun onPartialResults(partialResults: android.os.Bundle?) {}
                     override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
                 })
             }
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            val localeTag = when (language) {
+                "Urdu" -> "ur-PK"
+                "Hindi" -> "hi-IN"
+                else -> "en-US"
+            }
+            val listenIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, when (language) { "Urdu" -> "ur-PK"; "Hindi" -> "hi-IN"; else -> "en-US" })
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, localeTag)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, localeTag)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
                 putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
             }
             listening = true
-            recognizer?.startListening(intent)
+            recognizer?.startListening(listenIntent)
         }.onFailure {
             listening = false
-            scheduleListen(1500)
+            runCatching { recognizer?.cancel(); recognizer?.destroy() }
+            recognizer = null
+            scheduleListen(1200)
         }
     }
 
     private fun scheduleListen(delay: Long) {
-        if (!stopped) handler.postDelayed({ beginListening() }, delay)
+        if (!stopped) {
+            handler.removeCallbacks(listenRunnable)
+            handler.postDelayed(listenRunnable, delay)
+        }
     }
+
+    private val listenRunnable = Runnable { beginListening() }
 
     private fun handleUserSpeech(text: String) {
         if (stopped || processing) return
-        lastUserText = text
         processing = true
         saveLine(text, true)
+
         val prefs = getSharedPreferences("ayra", MODE_PRIVATE)
-        val history = runCatching { JSONArray(prefs.getString("history", "[]") ?: "[]") }.getOrElse { JSONArray() }
+        val history = runCatching { JSONArray(prefs.getString("history", "[]") ?: "[]") }
+            .getOrElse { JSONArray() }
         val messages = JSONArray()
         val instruction = when (language) {
-            "Urdu" -> "Reply in natural Urdu script."
-            "Hindi" -> "Reply in natural Hindi using Devanagari."
-            else -> "Reply in clear English."
+            "Urdu" -> "Reply in natural Urdu script (اردو). Understand spoken Urdu and commands. If the user speaks Roman Urdu, understand it and reply in Urdu script."
+            "Hindi" -> "Reply in natural Hindi using Devanagari. Understand spoken Hindi and commands."
+            else -> "Reply in clear English. Understand spoken English and commands."
         }
-        messages.put(JSONObject().put("role", "system").put("content", "You are AYRA, a friendly real-time voice companion. $instruction Keep spoken answers concise and conversational."))
-        for (i in (history.length() - 12).coerceAtLeast(0) until history.length()) {
+        messages.put(JSONObject().put("role", "system").put(
+            "content",
+            "You are AYRA, a helpful real-time voice assistant. $instruction Follow the user's latest instruction directly. Keep spoken answers concise and conversational."
+        ))
+        for (i in (history.length() - 14).coerceAtLeast(0) until history.length()) {
             val item = history.optJSONObject(i) ?: continue
             messages.put(JSONObject()
                 .put("role", if (item.optBoolean("user")) "user" else "assistant")
                 .put("content", item.optString("text")))
         }
         val payload = JSONObject().put("model", "Qwen3.8-27B").put("messages", messages)
-            .put("max_tokens", 350).put("temperature", 0.7)
-        thread {
+            .put("max_tokens", 450).put("temperature", 0.6)
+
+        thread(name = "ayra-live-ai") {
             val answer = runCatching {
                 val request = Request.Builder()
                     .url("https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions")
@@ -178,20 +239,31 @@ class AyraLiveVoiceService : Service() {
                     JSONObject(body).getJSONArray("choices").getJSONObject(0)
                         .getJSONObject("message").optString("content").trim()
                 }
-            }.getOrElse { "I couldn't reach the AI service. Please try speaking again." }
+            }.getOrElse {
+                when (language) {
+                    "Urdu" -> "معذرت، ابھی AI سروس سے رابطہ نہیں ہو سکا۔ دوبارہ بولیں۔"
+                    "Hindi" -> "माफ़ कीजिए, अभी AI सेवा से संपर्क नहीं हो सका। फिर से बोलें।"
+                    else -> "I couldn't reach the AI service. Please try speaking again."
+                }
+            }
             handler.post {
                 if (stopped) return@post
                 saveLine(answer, false)
                 processing = false
-                tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "ayra-live-reply")
-                handler.postDelayed({ beginListening() }, 700)
+                speaking = true
+                val result = tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "ayra-live-reply")
+                if (result == TextToSpeech.ERROR || tts == null) {
+                    speaking = false
+                    scheduleListen(500)
+                }
             }
         }
     }
 
     private fun saveLine(text: String, fromUser: Boolean) {
         val prefs = getSharedPreferences("ayra", MODE_PRIVATE)
-        val history = runCatching { JSONArray(prefs.getString("history", "[]") ?: "[]") }.getOrElse { JSONArray() }
+        val history = runCatching { JSONArray(prefs.getString("history", "[]") ?: "[]") }
+            .getOrElse { JSONArray() }
         history.put(JSONObject().put("text", text).put("user", fromUser))
         while (history.length() > 60) history.remove(0)
         prefs.edit().putString("history", history.toString()).apply()
@@ -200,6 +272,8 @@ class AyraLiveVoiceService : Service() {
     private fun stopSession() {
         stopped = true
         listening = false
+        processing = false
+        speaking = false
         handler.removeCallbacksAndMessages(null)
         runCatching { recognizer?.stopListening(); recognizer?.cancel(); recognizer?.destroy() }
         recognizer = null
