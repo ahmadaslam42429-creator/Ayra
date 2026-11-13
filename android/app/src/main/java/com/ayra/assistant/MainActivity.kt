@@ -274,15 +274,9 @@ private fun AyraApp() {
                     title = { Column { Text("AYRA", color = Color(0xFF65E7F2)); Text("Your AI companion", style = MaterialTheme.typography.labelSmall) } },
                     actions = {
                         TextButton(onClick = { showDeviceTools = true }) { Text("Device", color = Color(0xFF65E7F2)) }
-                        TextButton(onClick = {
-                            if (liveSession != null) {
-                                liveSession?.stop()
-                                liveSession = null
-                                avatarTalking = false
-                            } else startLive()
-                        }) {
-                            Icon(Icons.Default.HeadsetMic, "Toggle Live Voice", tint = if (liveSession != null) Color(0xFF65E7F2) else Color.LightGray)
-                            Text("LIVE CHAT", color = if (liveSession != null) Color(0xFF65E7F2) else Color.LightGray, style = MaterialTheme.typography.labelSmall)
+                        TextButton(onClick = { liveStatus = "Use the microphone button for voice input" }) {
+                            Icon(Icons.Default.HeadsetMic, "Voice input", tint = Color.LightGray)
+                            Text("VOICE", color = Color.LightGray, style = MaterialTheme.typography.labelSmall)
                         }
                         IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, "Settings") }
                     },
@@ -313,7 +307,7 @@ private fun AyraApp() {
             }
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 14.dp)) {
-                if (liveSession != null || liveStatus != "Live voice is off") {
+                if (liveStatus != "Live voice is off") {
                     Text(liveStatus, Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp), color = Color(0xFF65E7F2), style = MaterialTheme.typography.labelMedium)
                 }
                 AndroidView(
