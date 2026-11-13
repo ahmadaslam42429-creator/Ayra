@@ -181,9 +181,35 @@ private fun AyraApp() {
                 val body = payload.toString().toRequestBody("application/json".toMediaType())
                 val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=" + URLEncoder.encode(apiKey, "UTF-8")
                 val request = Request.Builder().url(url).post(body).build()
-                OkHttpClient().newCall(request).execute().use { response ->
-                    val text = response.body?.string().orEmpty()
-                    if (!response.isSuccessful) error("Gemini API error (${response.code}): $text")
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(90, java.util.concurrent.TimeUnit.SECONDS)
+                    .callTimeout(100, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+                var attempt = 0
+                var resultText: String? = null
+                while (attempt < 3 && resultText == null) {
+                    attempt++
+                    val response = client.newCall(request).execute()
+                    val statusCode = response.code
+                    val retryAfter = response.header("Retry-After")?.toLongOrNull()
+                    val responseText = response.body?.string().orEmpty()
+                    response.close()
+                    if (statusCode in 200..299) {
+                        resultText = responseText
+                    } else if (statusCode == 429 && attempt < 3) {
+                        val delaySeconds = (retryAfter ?: (1L shl attempt)).coerceIn(1L, 30L)
+                        Thread.sleep(delaySeconds * 1000L)
+                    } else if (statusCode == 429) {
+                        val detail = runCatching {
+                            JSONObject(responseText).optJSONObject("error")?.optString("message").orEmpty()
+                        }.getOrDefault("")
+                        error("Gemini quota/rate limit (429). ${detail.ifBlank { "Wait for your Gemini quota to reset or enable billing/increase the API limit in Google AI Studio." }}")
+                    } else {
+                        error("Gemini API error ($statusCode): $responseText")
+                    }
+                }
+                val text = resultText ?: error("Gemini did not return a response. Please try again.")
                     val candidate = JSONObject(text).getJSONArray("candidates").getJSONObject(0)
                     val answerText = buildString {
                         val parts = candidate.getJSONObject("content").getJSONArray("parts")
