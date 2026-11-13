@@ -242,13 +242,15 @@ private fun AyraApp() {
                     title = { Column { Text("AYRA", color = Color(0xFF65E7F2)); Text("Your AI companion", style = MaterialTheme.typography.labelSmall) } },
                     actions = {
                         TextButton(onClick = { showDeviceTools = true }) { Text("Device", color = Color(0xFF65E7F2)) }
-                        IconButton(onClick = {
+                        TextButton(onClick = {
                             if (liveSession != null) {
                                 liveSession?.stop()
                                 liveSession = null
+                                avatarTalking = false
                             } else startLive()
                         }) {
                             Icon(Icons.Default.HeadsetMic, "Toggle Live Voice", tint = if (liveSession != null) Color(0xFF65E7F2) else Color.LightGray)
+                            Text("LIVE CHAT", color = if (liveSession != null) Color(0xFF65E7F2) else Color.LightGray, style = MaterialTheme.typography.labelSmall)
                         }
                         IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, "Settings") }
                     },
