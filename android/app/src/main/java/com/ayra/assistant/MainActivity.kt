@@ -83,6 +83,7 @@ private fun AyraApp() {
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var liveSession by remember { mutableStateOf<GeminiLiveSession?>(null) }
     var liveStatus by remember { mutableStateOf("Live voice is off") }
+    var avatarTalking by remember { mutableStateOf(false) }
     DisposableEffect(Unit) {
         val engine = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
@@ -193,7 +194,10 @@ private fun AyraApp() {
         val session = GeminiLiveSession(
             apiKey = apiKey,
             language = language,
-            onStatus = { status -> (context as? ComponentActivity)?.runOnUiThread { liveStatus = status } },
+            onStatus = { status -> (context as? ComponentActivity)?.runOnUiThread {
+                liveStatus = status
+                avatarTalking = status.contains("speaking", ignoreCase = true)
+            } },
             onTranscript = { text, fromUser ->
                 (context as? ComponentActivity)?.runOnUiThread {
                     if (!(fromUser && handleDeviceCommand(text))) {
@@ -295,6 +299,9 @@ private fun AyraApp() {
                             }
                             loadUrl("https://appassets.androidplatform.net/assets/avatar.html")
                         }
+                    },
+                    update = { webView ->
+                        webView.evaluateJavascript("window.setTalking(${avatarTalking})", null)
                     },
                     modifier = Modifier.fillMaxWidth().height(245.dp)
                 )
