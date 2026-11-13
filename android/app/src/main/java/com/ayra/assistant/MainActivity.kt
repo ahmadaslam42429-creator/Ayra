@@ -7,7 +7,10 @@ import android.os.Bundle
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import androidx.webkit.WebViewAssetLoader
+import androidx.webkit.WebViewClientCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -232,12 +235,20 @@ private fun AyraApp() {
                 }
                 AndroidView(
                     factory = { viewContext ->
+                        val assetLoader = WebViewAssetLoader.Builder()
+                            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(viewContext))
+                            .build()
                         WebView(viewContext).apply {
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
-                            settings.allowFileAccess = true
-                            webViewClient = WebViewClient()
-                            loadUrl("file:///android_asset/avatar.html")
+                            settings.allowFileAccess = false
+                            settings.allowContentAccess = false
+                            webViewClient = object : WebViewClientCompat() {
+                                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                                    return assetLoader.shouldInterceptRequest(request.url)
+                                }
+                            }
+                            loadUrl("https://appassets.androidplatform.net/assets/avatar.html")
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(245.dp)
