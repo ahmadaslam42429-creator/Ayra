@@ -397,15 +397,12 @@ private fun AyraApp() {
                 }
                 AndroidView(
                     factory = { viewContext ->
-                        val assetLoader = WebViewAssetLoader.Builder()
-                            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(viewContext))
-                            .build()
                         WebView(viewContext).apply {
-                            setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+                            setBackgroundColor(android.graphics.Color.rgb(9, 13, 34))
+                            setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
-                            settings.allowFileAccess = false
-                            settings.allowContentAccess = false
+                            settings.loadsImagesAutomatically = true
                             settings.mediaPlaybackRequiresUserGesture = false
                             webChromeClient = object : WebChromeClient() {
                                 override fun onConsoleMessage(message: ConsoleMessage): Boolean {
@@ -416,14 +413,12 @@ private fun AyraApp() {
                                 }
                             }
                             webViewClient = object : WebViewClientCompat() {
-                                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-                                    return assetLoader.shouldInterceptRequest(request.url)
-                                }
                                 override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceErrorCompat) {
                                     if (request.isForMainFrame) liveStatus = "3D avatar page failed to load: ${error.description}"
                                 }
                             }
-                            loadUrl("https://appassets.androidplatform.net/assets/avatar.html")
+                            val avatarHtml = viewContext.assets.open("avatar.html").bufferedReader().use { it.readText() }
+                            loadDataWithBaseURL("https://appassets.androidplatform.net/assets/", avatarHtml, "text/html", "UTF-8", null)
                         }
                     },
                     update = { webView ->
