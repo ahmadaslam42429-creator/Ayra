@@ -127,7 +127,23 @@ private fun AyraApp() {
             listOf("app permissions", "app settings").any { command.contains(it) } ->
                 Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
                     .apply { data = android.net.Uri.parse("package:" + context.packageName) }
-            command.contains("device settings") || command == "open settings" ->
+            listOf("open browser", "browser kholo", "browser khol do", "براوزر کھولو", "ब्राउज़र खोलो").any { command.contains(it) } ->
+                Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com"))
+            listOf("open contacts", "contacts kholo", "contact kholo", "کانٹیکٹس کھولو", "कॉन्टैक्ट्स खोलो").any { command.contains(it) } ->
+                Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CONTACTS)
+            listOf("open messages", "open sms", "messages kholo", "میسجز کھولو", "मैसेज खोलो").any { command.contains(it) } ->
+                Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MESSAGING)
+            listOf("open calendar", "calendar kholo", "کیلنڈر کھولو", "कैलेंडर खोलो").any { command.contains(it) } ->
+                Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CALENDAR)
+            listOf("open maps", "maps kholo", "نقشہ کھولو", "मैप खोलो").any { command.contains(it) } ->
+                Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MAPS)
+            listOf("open music", "music kholo", "میوزک کھولو", "म्यूजिक खोलो").any { command.contains(it) } ->
+                Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MUSIC)
+            listOf("location settings", "open location", "location kholo").any { command.contains(it) } ->
+                Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+            listOf("battery settings", "open battery").any { command.contains(it) } ->
+                Intent(android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS)
+            command.contains("device settings") || command == "open settings" || command == "settings kholo" ->
                 Intent(android.provider.Settings.ACTION_SETTINGS)
             else -> null
         } ?: return false
@@ -474,6 +490,22 @@ private fun AyraApp() {
                             runCatching { context.startActivity(Intent(Intent.ACTION_DIAL)) }
                             showDeviceTools = false
                         }, modifier = Modifier.fillMaxWidth()) { Text("Phone dialer") }
+                        val appShortcuts = listOf(
+                            "Browser" to Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com")),
+                            "Contacts" to Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CONTACTS),
+                            "Messages" to Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MESSAGING),
+                            "Calendar" to Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CALENDAR),
+                            "Maps" to Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MAPS),
+                            "Music" to Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MUSIC),
+                            "Location settings" to Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS),
+                            "Battery settings" to Intent(android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS)
+                        )
+                        appShortcuts.forEach { (label, intent) ->
+                            TextButton(onClick = {
+                                runCatching { context.startActivity(intent) }
+                                showDeviceTools = false
+                            }, modifier = Modifier.fillMaxWidth()) { Text(label) }
+                        }
                     }
                 },
                 confirmButton = { TextButton(onClick = { showDeviceTools = false }) { Text("Close") } }
