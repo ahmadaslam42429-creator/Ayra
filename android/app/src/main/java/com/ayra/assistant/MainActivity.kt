@@ -141,10 +141,6 @@ private fun AyraApp() {
         }
     }
 
-    val livePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) createLiveSession() else liveStatus = "Microphone permission is required for Live Voice."
-    }
-
     fun createLiveSession() {
         val session = GeminiLiveSession(
             apiKey = apiKey,
@@ -159,6 +155,10 @@ private fun AyraApp() {
         )
         liveSession = session
         session.start()
+    }
+
+    val livePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) createLiveSession() else liveStatus = "Microphone permission is required for Live Voice."
     }
 
     fun startLive() {
