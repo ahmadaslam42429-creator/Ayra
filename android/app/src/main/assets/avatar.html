@@ -15,6 +15,8 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0a1120;col
 <body>
 <canvas id="stage"></canvas><div id="status">AYRA 3D avatar · loading…</div>
 <script>
+window.__ayraTalking = false;
+window.setTalking = function(value){ window.__ayraTalking = !!value; };
 window.addEventListener("error",e=>{const s=document.getElementById("status");if(s)s.textContent="3D error: "+(e.message||"module load failed");});
 window.addEventListener("unhandledrejection",e=>{const s=document.getElementById("status");if(s)s.textContent="3D error: "+String(e.reason||"module load failed");});
 </script>
@@ -37,8 +39,8 @@ scene.add(new THREE.HemisphereLight(0xb8dcff,0x26304b,2));
 const key=new THREE.DirectionalLight(0xffffff,2.4); key.position.set(1,3,4); scene.add(key);
 const rim=new THREE.PointLight(0x58d9ff,18,8); rim.position.set(-2,1,1); scene.add(rim);
 let avatar=null;
-let talking=false;
-window.setTalking=(value)=>{talking=!!value;};
+let talking=!!window.__ayraTalking;
+window.setTalking=(value)=>{talking=!!value;window.__ayraTalking=talking;};
 const loader=new GLTFLoader(); loader.register(parser=>new VRMLoaderPlugin(parser));
 loader.load('models/blue-pixie.vrm',gltf=>{
  avatar=gltf.userData.vrm; VRMUtils.removeUnnecessaryVertices(gltf.scene); VRMUtils.removeUnnecessaryJoints(gltf.scene);
