@@ -57,11 +57,11 @@ class AyraScreenAccessibilityService : AccessibilityService() {
     private fun performCommand(raw: String): String? {
         val command = raw.trim()
         val lower = command.lowercase()
-        val protected = listOf(
+        val protectedActions = listOf(
             "send", "publish", "post", "delete", "remove", "pay", "purchase", "buy",
             "send message", "send whatsapp", "send sms", "publish post", "like", "share"
         )
-        if (protected.any { lower.startsWith(it) } ||
+        if (protectedActions.any { lower.startsWith(it) } ||
             listOf("بھیج دو", "پوسٹ کر دو", "ڈیلیٹ", "خرید لو", "پیسے ادا").any { lower.contains(it) }) {
             return when {
                 lower.contains("post") || lower.contains("publish") || lower.contains("پوسٹ") ->
