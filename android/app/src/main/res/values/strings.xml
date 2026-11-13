@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">AYRA</string>
-    <string name="ayra_accessibility_description">AYRA can read visible screen text so you can ask about the app or page you are viewing. Enable or disable this service yourself in Android Accessibility settings.</string>
+    <string name="ayra_accessibility_description">AYRA can read visible screen text and, when you ask, tap controls or enter text inside apps. Enable or disable this service yourself in Android Accessibility settings. Review sensitive actions yourself.</string>
 </resources>
