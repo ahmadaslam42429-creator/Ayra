@@ -105,7 +105,7 @@ private fun AyraApp() {
             val answer = runCatching {
                 val body = JSONObject()
                     .put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
-                    .toString().toRequestBody("application/json".toMediaTypeCompat())
+                    .toString().toRequestBody("application/json".toMediaType())
                 val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + URLEncoder.encode(apiKey, "UTF-8")
                 val request = Request.Builder().url(url).post(body).build()
                 OkHttpClient().newCall(request).execute().use { response ->
@@ -226,4 +226,3 @@ private fun AyraApp() {
     }
 }
 
-private fun String.toMediaTypeCompat() = okhttp3.MediaType.Companion.toMediaType(this)
