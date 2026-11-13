@@ -274,6 +274,7 @@ class AyraLiveVoiceService : Service() {
     }
 
     private fun runDeviceCommand(spoken: String): String? {
+        AyraScreenAccessibilityService.performVoiceCommand(spoken)?.let { return it }
         val command = spoken.lowercase(Locale.ROOT).trim()
         val quickActions = listOf(
             listOf("open wifi", "open wi-fi", "wifi settings", "wi-fi settings", "وائی فائی کھولو", "وائی فائی سیٹنگز") to Intent(android.provider.Settings.ACTION_WIFI_SETTINGS),
