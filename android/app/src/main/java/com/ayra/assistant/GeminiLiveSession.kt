@@ -95,7 +95,10 @@ class GeminiLiveSession(
                         for (i in 0 until parts.length()) {
                             val inline = parts.optJSONObject(i)?.optJSONObject("inlineData") ?: continue
                             val encoded = inline.optString("data")
-                            if (encoded.isNotBlank()) playAudio(Base64.decode(encoded, Base64.DEFAULT))
+                            if (encoded.isNotBlank()) {
+                                onStatus("AYRA is speaking…")
+                                playAudio(Base64.decode(encoded, Base64.DEFAULT))
+                            }
                         }
                     }
                     if (serverContent?.optBoolean("turnComplete") == true) {
