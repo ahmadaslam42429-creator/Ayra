@@ -47,4 +47,5 @@ jobs:
           if ! gh release view ayra-latest >/dev/null 2>&1; then
             gh release create ayra-latest --title "AYRA Android APK" --notes "Latest installable AYRA Android debug APK. Download app-debug.apk."
           fi
-          gh release upload ayra-latest android/app/build/outputs/apk/debug/app-debug.apk --clobber
+          cp android/app/build/outputs/apk/debug/app-debug.apk AYRA.apk
+          gh release upload ayra-latest AYRA.apk --clobber
