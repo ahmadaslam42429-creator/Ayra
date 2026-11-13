@@ -197,6 +197,9 @@ private fun AyraApp() {
             onStatus = { status -> (context as? ComponentActivity)?.runOnUiThread {
                 liveStatus = status
                 avatarTalking = status.contains("speaking", ignoreCase = true)
+                if (status.contains("failed", ignoreCase = true) || status.contains("disconnected", ignoreCase = true) || status.contains("error", ignoreCase = true)) {
+                    liveSession = null
+                }
             } },
             onTranscript = { text, fromUser ->
                 (context as? ComponentActivity)?.runOnUiThread {
