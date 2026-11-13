@@ -14,6 +14,10 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0a1120;col
 </head>
 <body>
 <canvas id="stage"></canvas><div id="status">AYRA 3D avatar · loading…</div>
+<script>
+window.addEventListener("error",e=>{const s=document.getElementById("status");if(s)s.textContent="3D error: "+(e.message||"module load failed");});
+window.addEventListener("unhandledrejection",e=>{const s=document.getElementById("status");if(s)s.textContent="3D error: "+String(e.reason||"module load failed");});
+</script>
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -41,7 +45,7 @@ loader.load('models/blue-pixie.vrm',gltf=>{
  avatar.scene.rotation.y=Math.PI; scene.add(avatar.scene);
  status.textContent='AYRA 3D avatar';
 },p=>{if(p.total)status.textContent='Loading avatar '+Math.round(p.loaded/p.total*100)+'%';},e=>{
- console.error(e); status.textContent='Avatar could not load. Check internet connection.';
+ console.error(e); status.textContent='Avatar could not load: '+(e?.message||'check internet/WebGL');
 });
 const clock=new THREE.Clock();
 function animate(){
