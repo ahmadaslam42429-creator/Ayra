@@ -66,6 +66,8 @@ private fun AyraApp() {
     var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var speakReplies by remember { mutableStateOf(prefs.getBoolean("speak", true)) }
+    var useGoogleSearch by remember { mutableStateOf(prefs.getBoolean("google_search", true)) }
+    var showDeviceTools by remember { mutableStateOf(false) }
     val history = remember {
         mutableStateListOf<ChatLine>().apply {
             val raw = prefs.getString("history", "[]") ?: "[]"
@@ -106,16 +108,20 @@ private fun AyraApp() {
             return
         }
         busy = true
+        val searchEnabled = useGoogleSearch
         val prompt = buildString {
             append("You are AYRA, a helpful friendly AI assistant. Reply in $language unless the user requests another language.\n")
             history.takeLast(12).forEach { append(if (it.fromUser) "User: " else "AYRA: "); append(it.text); append("\n") }
         }
         thread {
             val answer = runCatching {
-                val body = JSONObject()
+                val payload = JSONObject()
                     .put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
-                    .toString().toRequestBody("application/json".toMediaType())
-                val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + URLEncoder.encode(apiKey, "UTF-8")
+                if (searchEnabled) {
+                    payload.put("tools", JSONArray().put(JSONObject().put("googleSearch", JSONObject())))
+                }
+                val body = payload.toString().toRequestBody("application/json".toMediaType())
+                val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=" + URLEncoder.encode(apiKey, "UTF-8")
                 val request = Request.Builder().url(url).post(body).build()
                 OkHttpClient().newCall(request).execute().use { response ->
                     val text = response.body?.string().orEmpty()
@@ -193,6 +199,7 @@ private fun AyraApp() {
                 TopAppBar(
                     title = { Column { Text("AYRA", color = Color(0xFF65E7F2)); Text("Your AI companion", style = MaterialTheme.typography.labelSmall) } },
                     actions = {
+                        TextButton(onClick = { showDeviceTools = true }) { Text("Device", color = Color(0xFF65E7F2)) }
                         IconButton(onClick = {
                             if (liveSession != null) {
                                 liveSession?.stop()
@@ -292,14 +299,54 @@ private fun AyraApp() {
                             Checkbox(checked = speakReplies, onCheckedChange = { speakReplies = it })
                             Text("Speak AI replies aloud")
                         }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = useGoogleSearch, onCheckedChange = { useGoogleSearch = it })
+                            Text("Search the web with Google")
+                        }
                         Text("Your key and chat history are stored on this device.", style = MaterialTheme.typography.bodySmall)
                     }
                 },
                 confirmButton = { TextButton(onClick = {
-                    prefs.edit().putString("gemini_key", apiKey).putString("language", language).putBoolean("speak", speakReplies).apply()
+                    prefs.edit().putString("gemini_key", apiKey).putString("language", language).putBoolean("speak", speakReplies).putBoolean("google_search", useGoogleSearch).apply()
                     showSettings = false
                 }) { Text("Save") } },
                 dismissButton = { TextButton(onClick = { showSettings = false }) { Text("Cancel") } }
+            )
+        }
+        if (showDeviceTools) {
+            AlertDialog(
+                onDismissRequest = { showDeviceTools = false },
+                title = { Text("Android device tools") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("These shortcuts open Android's own controls. Protected actions still require your confirmation.")
+                        val actions = listOf(
+                            "Wi-Fi" to android.provider.Settings.ACTION_WIFI_SETTINGS,
+                            "Bluetooth" to android.provider.Settings.ACTION_BLUETOOTH_SETTINGS,
+                            "Display" to android.provider.Settings.ACTION_DISPLAY_SETTINGS,
+                            "Sound" to android.provider.Settings.ACTION_SOUND_SETTINGS,
+                            "App permissions" to android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                        )
+                        actions.forEach { (label, action) ->
+                            TextButton(onClick = {
+                                val intent = if (action == android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS) {
+                                    Intent(action).apply { data = android.net.Uri.parse("package:" + context.packageName) }
+                                } else Intent(action)
+                                runCatching { context.startActivity(intent) }
+                                showDeviceTools = false
+                            }, modifier = Modifier.fillMaxWidth()) { Text(label) }
+                        }
+                        TextButton(onClick = {
+                            runCatching { context.startActivity(Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS)) }
+                            showDeviceTools = false
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Alarms") }
+                        TextButton(onClick = {
+                            runCatching { context.startActivity(Intent(Intent.ACTION_DIAL)) }
+                            showDeviceTools = false
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Phone dialer") }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { showDeviceTools = false }) { Text("Close") } }
             )
         }
     }
