@@ -85,7 +85,13 @@ private fun AyraApp() {
     var liveStatus by remember { mutableStateOf("Live voice is off") }
     DisposableEffect(Unit) {
         val engine = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) tts?.language = Locale.getDefault()
+            if (status == TextToSpeech.SUCCESS) {
+                engine.language = when (language) {
+                    "Urdu" -> Locale("ur", "PK")
+                    "Hindi" -> Locale("hi", "IN")
+                    else -> Locale("en", "US")
+                }
+            }
         }
         tts = engine
         onDispose { engine.stop(); engine.shutdown() }
@@ -340,6 +346,11 @@ private fun AyraApp() {
                 },
                 confirmButton = { TextButton(onClick = {
                     prefs.edit().putString("gemini_key", apiKey).putString("language", language).putBoolean("speak", speakReplies).putBoolean("google_search", useGoogleSearch).apply()
+                    tts?.language = when (language) {
+                        "Urdu" -> Locale("ur", "PK")
+                        "Hindi" -> Locale("hi", "IN")
+                        else -> Locale("en", "US")
+                    }
                     showSettings = false
                 }) { Text("Save") } },
                 dismissButton = { TextButton(onClick = { showSettings = false }) { Text("Cancel") } }
