@@ -7,12 +7,18 @@
     </queries>
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <application
         android:allowBackup="true"
         android:label="AYRA"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="false">
+        <service
+            android:name=".AyraLiveVoiceService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
         <service
             android:name=".AyraScreenAccessibilityService"
             android:label="AYRA screen understanding"
