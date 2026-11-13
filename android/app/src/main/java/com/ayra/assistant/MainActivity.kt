@@ -112,6 +112,26 @@ private fun AyraApp() {
         prefs.edit().putString("history", arr.toString()).apply()
     }
 
+    fun launchInstalledApp(command: String): Boolean {
+        val appName = listOf("open ", "launch ", "start ")
+            .firstNotNullOfOrNull { prefix ->
+                if (command.startsWith(prefix)) command.removePrefix(prefix).trim() else null
+            } ?: return false
+        if (appName.isBlank()) return false
+        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val apps = context.packageManager.queryIntentActivities(launcher, 0)
+        val match = apps.firstOrNull {
+            it.loadLabel(context.packageManager).toString().trim().equals(appName, ignoreCase = true)
+        } ?: apps.firstOrNull {
+            it.loadLabel(context.packageManager).toString().trim().contains(appName, ignoreCase = true)
+        } ?: return false
+        val launchIntent = Intent(Intent.ACTION_MAIN)
+            .addCategory(Intent.CATEGORY_LAUNCHER)
+            .setClassName(match.activityInfo.packageName, match.activityInfo.name)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return runCatching { context.startActivity(launchIntent) }.isSuccess
+    }
+
     fun handleDeviceCommand(message: String): Boolean {
         val command = message.lowercase(Locale.ROOT)
         val target: Intent? = when {
@@ -149,10 +169,20 @@ private fun AyraApp() {
             command.contains("device settings") || command == "open settings" || command == "settings kholo" ->
                 Intent(android.provider.Settings.ACTION_SETTINGS)
             else -> null
-        } ?: return false
+        }
         history.add(ChatLine(message, true))
-        val launched = runCatching { context.startActivity(target) }.isSuccess
-        history.add(ChatLine(if (launched) "Opening the requested Android control. You can confirm or change it in Android." else "Android could not open that control on this device.", false))
+        val launched = if (target != null) {
+            runCatching { context.startActivity(target) }.isSuccess
+        } else {
+            launchInstalledApp(command)
+        }
+        if (target == null && !launched) {
+            history.removeAt(history.lastIndex)
+            return false
+        }
+        history.add(ChatLine(if (launched) {
+            if (target == null) "Opening $command." else "Opening the requested Android control. You can confirm or change it in Android."
+        } else "Android could not open that control on this device.", false))
         persist()
         return true
     }
@@ -390,7 +420,7 @@ private fun AyraApp() {
                         }
                     },
                     update = { webView ->
-                        webView.evaluateJavascript("window.setTalking(${avatarTalking})", null)
+                        webView.evaluateJavascript("if (typeof window.setTalking === 'function') { window.setTalking(${avatarTalking}); } else { window.__ayraTalking = ${avatarTalking}; }", null)
                     },
                     modifier = Modifier.fillMaxWidth().height(245.dp)
                 )
