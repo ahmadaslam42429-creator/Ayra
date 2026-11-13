@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.HeadsetMic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -72,6 +73,8 @@ private fun AyraApp() {
         }
     }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    var liveSession by remember { mutableStateOf<GeminiLiveSession?>(null) }
+    var liveStatus by remember { mutableStateOf("Live voice is off") }
     DisposableEffect(Unit) {
         val engine = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) tts?.language = Locale.getDefault()
@@ -138,6 +141,43 @@ private fun AyraApp() {
         }
     }
 
+    val livePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) createLiveSession() else liveStatus = "Microphone permission is required for Live Voice."
+    }
+
+    fun createLiveSession() {
+        val session = GeminiLiveSession(
+            apiKey = apiKey,
+            language = language,
+            onStatus = { status -> (context as? ComponentActivity)?.runOnUiThread { liveStatus = status } },
+            onTranscript = { text, fromUser ->
+                (context as? ComponentActivity)?.runOnUiThread {
+                    history.add(ChatLine(text, fromUser))
+                    persist()
+                }
+            }
+        )
+        liveSession = session
+        session.start()
+    }
+
+    fun startLive() {
+        if (apiKey.isBlank()) {
+            showSettings = true
+            liveStatus = "Add your Gemini API key to start Live Voice."
+            return
+        }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            createLiveSession()
+        } else {
+            livePermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    DisposableEffect(liveSession) {
+        onDispose { liveSession?.stop() }
+    }
+
     MaterialTheme(colorScheme = darkColorScheme(
         primary = Color(0xFF65E7F2), secondary = Color(0xFFB68CFF),
         background = Color(0xFF090D18), surface = Color(0xFF151C2B)
@@ -146,7 +186,17 @@ private fun AyraApp() {
             topBar = {
                 TopAppBar(
                     title = { Column { Text("AYRA", color = Color(0xFF65E7F2)); Text("Your AI companion", style = MaterialTheme.typography.labelSmall) } },
-                    actions = { IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, "Settings") } },
+                    actions = {
+                        IconButton(onClick = {
+                            if (liveSession != null) {
+                                liveSession?.stop()
+                                liveSession = null
+                            } else startLive()
+                        }) {
+                            Icon(Icons.Default.HeadsetMic, "Toggle Live Voice", tint = if (liveSession != null) Color(0xFF65E7F2) else Color.LightGray)
+                        }
+                        IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, "Settings") }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF101727))
                 )
             },
@@ -174,6 +224,9 @@ private fun AyraApp() {
             }
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 14.dp)) {
+                if (liveSession != null || liveStatus != "Live voice is off") {
+                    Text(liveStatus, Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp), color = Color(0xFF65E7F2), style = MaterialTheme.typography.labelMedium)
+                }
                 if (history.isEmpty()) {
                     Spacer(Modifier.height(56.dp))
                     Text("Hello, I'm AYRA", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF65E7F2))
