@@ -114,7 +114,12 @@ class GeminiLiveSession(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                onStatus("Live connection failed: ${t.message ?: "network error"}")
+                val code = response?.code
+                if (code == 429) {
+                    onStatus("Gemini Live quota/rate limit (429). Wait for quota reset or check billing and rate limits in Google AI Studio.")
+                } else {
+                    onStatus("Live connection failed${code?.let { " (HTTP $it)" } ?: ""}: ${t.message ?: "network error"}")
+                }
                 stop()
             }
 
