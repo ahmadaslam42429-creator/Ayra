@@ -601,81 +601,192 @@ private fun configureMaleVoice(engine: TextToSpeech, language: String, preferred
 @Composable
 private fun HologramView(listening: Boolean, thinking: Boolean, talking: Boolean) {
     val motion = rememberInfiniteTransition(label = "adam-hologram")
-    val phase by motion.animateFloat(
-        initialValue = 0f, targetValue = 6.28318f,
-        animationSpec = infiniteRepeatable(tween(3600, easing = LinearEasing)), label = "rotation"
-    )
-    val bob by motion.animateFloat(
-        initialValue = -7f, targetValue = 7f,
-        animationSpec = infiniteRepeatable(tween(1500, easing = LinearEasing), RepeatMode.Reverse),
-        label = "float"
-    )
-    val pulse by motion.animateFloat(
-        initialValue = 0.72f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Reverse),
-        label = "glow"
-    )
-    val cyan = Color(0xFF42DFFF)
-    val bright = Color(0xFFB8FFFF)
-    Column(Modifier.fillMaxWidth().height(270.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    val phase by motion.animateFloat(0f, 6.28318f,
+        animationSpec = infiniteRepeatable(tween(5200, easing = LinearEasing)), label = "phase")
+    val scan by motion.animateFloat(0f, 1f,
+        animationSpec = infiniteRepeatable(tween(2300, easing = LinearEasing)), label = "scan")
+    val pulse by motion.animateFloat(0.65f, 1f,
+        animationSpec = infiniteRepeatable(tween(1100), RepeatMode.Reverse), label = "pulse")
+    val blink by motion.animateFloat(0f, 1f,
+        animationSpec = infiniteRepeatable(tween(3600), RepeatMode.Reverse), label = "blink")
+    val cyan = Color(0xFF54EFFF)
+    val pale = Color(0xFFB8FFFF)
+    val violet = Color(0xFFB45CFF)
+    Column(Modifier.fillMaxWidth().height(330.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            text = when { talking -> "ADAM IS SPEAKING"; thinking -> "ADAM IS THINKING"; listening -> "ADAM IS LISTENING"; else -> "ADAM • HOLOGRAM ACTIVE" },
-            modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
-            color = bright, style = MaterialTheme.typography.labelSmall
+            text = when { talking -> "ADAM IS SPEAKING"; thinking -> "ADAM IS THINKING"; listening -> "ADAM IS LISTENING"; else -> "ADAM • HOLOGRAPHIC LINK" },
+            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+            color = pale, style = MaterialTheme.typography.labelSmall
         )
-        Canvas(Modifier.fillMaxWidth().weight(1f).background(Color(0xFF090D18))) {
-            val cx = size.width / 2f
-            val cy = size.height * 0.47f + bob
-            val radius = minOf(size.width * 0.29f, size.height * 0.39f).coerceAtLeast(42f)
-            // Bright outer glow and animated orbital rings.
-            drawCircle(cyan.copy(alpha = 0.10f * pulse), radius * 1.48f, Offset(cx, cy))
-            for (i in 0..2) {
-                val angle = phase * (if (i == 1) -1f else 1f) + i * 1.05f
-                val rx = radius * (1.30f + i * 0.12f)
-                val ry = radius * (0.20f + i * 0.035f)
-                val path = Path()
-                for (step in 0..80) {
-                    val a = step / 80f * 6.28318f + angle
-                    val p = Offset(cx + kotlin.math.cos(a) * rx, cy + radius * 0.78f + kotlin.math.sin(a) * ry)
-                    if (step == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
+        Canvas(Modifier.fillMaxWidth().weight(1f).background(Color(0xFF050817))) {
+            val w = size.width
+            val h = size.height
+            val cx = w * 0.50f
+            val headTop = h * 0.08f
+            val headBottom = h * 0.57f
+            val headW = w * 0.235f
+            val headH = headBottom - headTop
+            val headCx = cx + kotlin.math.sin(phase) * 3.5f
+
+            // Dark futuristic server-room backdrop and equipment racks.
+            drawRect(Color(0xFF080B20))
+            for (side in 0..1) {
+                val left = if (side == 0) 0f else w * 0.83f
+                val right = if (side == 0) w * 0.16f else w
+                drawRect(Color(0xFF10152F).copy(alpha = 0.78f), Offset(left, 0f),
+                    androidx.compose.ui.geometry.Size(right - left, h * 0.92f))
+                drawRect(violet.copy(alpha = 0.20f), Offset(left + 4f, h * 0.04f),
+                    androidx.compose.ui.geometry.Size(3f, h * 0.78f))
+                for (row in 0..9) {
+                    val y = h * (0.09f + row * 0.078f)
+                    drawLine(Color(0xFF35466F).copy(alpha = 0.65f), Offset(left + 9f, y),
+                        Offset(right - 8f, y), 2f)
+                    val light = if (row % 3 == 0) violet else cyan
+                    drawRect(light.copy(alpha = 0.65f), Offset(left + 13f, y + 5f),
+                        androidx.compose.ui.geometry.Size(7f, 3f))
+                    drawRect(Color(0xFFFFB66E).copy(alpha = 0.8f), Offset(right - 25f, y + 5f),
+                        androidx.compose.ui.geometry.Size(10f, 4f))
                 }
-                drawPath(path, cyan.copy(alpha = 0.60f * pulse), style = Stroke(width = 2f))
             }
-            // Filled translucent head makes the avatar visible even on low-end devices.
-            drawCircle(Color(0xFF102D43).copy(alpha = 0.92f), radius, Offset(cx, cy))
-            drawCircle(cyan.copy(alpha = 0.95f * pulse), radius, Offset(cx, cy), style = Stroke(width = 2.5f))
-            drawOval(
-                color = cyan.copy(alpha = 0.24f),
-                topLeft = Offset(cx - radius * 0.80f, cy - radius * 1.05f),
-                size = androidx.compose.ui.geometry.Size(radius * 1.60f, radius * 2.10f),
-                style = Stroke(width = 1.2f)
-            )
-            // Face grid and animated scan line.
-            for (i in -3..3) {
-                val x = cx + i * radius * 0.22f
-                drawLine(cyan.copy(alpha = 0.22f), Offset(x, cy - radius * 0.78f), Offset(x, cy + radius * 0.78f), 1f)
+            // Perspective grid behind the projection.
+            for (i in 0..12) {
+                val x = w * (0.25f + i * 0.042f)
+                drawLine(Color(0xFF315B91).copy(alpha = 0.22f), Offset(x, h * 0.05f),
+                    Offset(x, h * 0.79f), 1f)
             }
-            val scanY = cy - radius * 0.72f + ((phase / 6.28318f) * radius * 1.44f)
-            drawLine(bright.copy(alpha = 0.70f), Offset(cx - radius * 0.82f, scanY), Offset(cx + radius * 0.82f, scanY), 2f)
-            // Eyes, nose and mouth.
-            val eyeY = cy - radius * 0.12f
+            for (i in 0..10) {
+                val y = h * (0.08f + i * 0.062f)
+                drawLine(Color(0xFF315B91).copy(alpha = 0.22f), Offset(w * 0.24f, y),
+                    Offset(w * 0.76f, y), 1f)
+            }
+            // Purple scanning beam entering from the upper-right.
+            val beam = Path().apply {
+                moveTo(w * 0.98f, h * 0.18f)
+                lineTo(cx + headW * 0.45f, h * 0.67f)
+                lineTo(cx + headW * 0.20f, h * 0.69f)
+                close()
+            }
+            drawPath(beam, violet.copy(alpha = 0.10f * pulse))
+            drawLine(violet.copy(alpha = 0.68f * pulse), Offset(w * 0.98f, h * 0.18f),
+                Offset(cx + headW * 0.35f, h * 0.64f), 3f)
+
+            // Floating hologram pedestal and projection rays.
+            val baseY = h * 0.88f
+            for (i in 0..5) {
+                val x = cx - headW * 0.48f + i * headW * 0.19f
+                drawLine(cyan.copy(alpha = 0.24f + pulse * 0.12f), Offset(x, h * 0.63f),
+                    Offset(x, baseY - 5f), 2f)
+            }
+            for (i in 0..3) {
+                val rx = headW * (1.55f + i * 0.17f)
+                val ring = Path()
+                for (step in 0..80) {
+                    val a = step / 80f * 6.28318f
+                    val p = Offset(cx + kotlin.math.cos(a) * rx,
+                        baseY + kotlin.math.sin(a) * h * 0.025f)
+                    if (step == 0) ring.moveTo(p.x, p.y) else ring.lineTo(p.x, p.y)
+                }
+                drawPath(ring, cyan.copy(alpha = (0.72f - i * 0.13f) * pulse), style = Stroke(width = 2f))
+            }
+            drawOval(Color(0xFF42DFFF).copy(alpha = 0.12f),
+                Offset(cx - headW * 1.8f, baseY - h * 0.025f),
+                androidx.compose.ui.geometry.Size(headW * 3.6f, h * 0.05f))
+
+            // Shoulder and upper torso wireframe bust.
+            val shoulders = Path().apply {
+                moveTo(headCx - headW * 0.28f, headBottom - 2f)
+                lineTo(headCx - headW * 0.52f, h * 0.64f)
+                lineTo(cx - headW * 1.75f, h * 0.72f)
+                lineTo(cx - headW * 1.95f, h * 0.84f)
+                quadraticTo(cx, h * 0.90f, cx + headW * 1.95f, h * 0.84f)
+                lineTo(cx + headW * 1.75f, h * 0.72f)
+                lineTo(headCx + headW * 0.52f, h * 0.64f)
+                lineTo(headCx + headW * 0.28f, headBottom - 2f)
+                close()
+            }
+            drawPath(shoulders, cyan.copy(alpha = 0.09f))
+            drawPath(shoulders, cyan.copy(alpha = 0.95f * pulse), style = Stroke(width = 2.2f))
+            for (row in 0..7) {
+                val y = h * (0.68f + row * 0.026f)
+                val half = headW * (0.65f + row * 0.15f)
+                drawLine(cyan.copy(alpha = 0.65f), Offset(cx - half, y),
+                    Offset(cx + half, y), 1.2f)
+            }
+            for (i in -7..7) {
+                val x = cx + i * headW * 0.23f
+                drawLine(cyan.copy(alpha = 0.52f), Offset(cx, h * 0.65f),
+                    Offset(x, h * 0.85f), 1f)
+            }
+            // Neck with vertical luminous filaments.
+            for (i in -4..4) {
+                val x = headCx + i * headW * 0.12f
+                drawLine(cyan.copy(alpha = 0.72f), Offset(x, headBottom - 3f),
+                    Offset(x, h * 0.72f), 1.4f)
+            }
+
+            // Holographic head silhouette: softly filled and outlined.
+            val face = Path().apply {
+                moveTo(headCx, headTop)
+                cubicTo(headCx - headW * 0.88f, headTop, headCx - headW, headTop + headH * 0.25f, headCx - headW * 0.88f, headTop + headH * 0.58f)
+                cubicTo(headCx - headW * 0.80f, headTop + headH * 0.84f, headCx - headW * 0.48f, headBottom, headCx, headBottom)
+                cubicTo(headCx + headW * 0.48f, headBottom, headCx + headW * 0.80f, headTop + headH * 0.84f, headCx + headW * 0.88f, headTop + headH * 0.58f)
+                cubicTo(headCx + headW, headTop + headH * 0.25f, headCx + headW * 0.88f, headTop, headCx, headTop)
+                close()
+            }
+            drawPath(face, Color(0xFF39DDF5).copy(alpha = 0.12f))
+            drawPath(face, cyan.copy(alpha = 0.98f * pulse), style = Stroke(width = 2.5f))
+            // Ear outlines.
             for (side in listOf(-1f, 1f)) {
-                val eyeX = cx + side * radius * 0.34f
-                drawCircle(bright, radius * 0.075f, Offset(eyeX, eyeY))
-                drawLine(cyan, Offset(eyeX - radius * 0.15f, eyeY - radius * 0.13f), Offset(eyeX + radius * 0.15f, eyeY - radius * 0.13f), 2f)
+                drawOval(cyan.copy(alpha = 0.85f), Offset(headCx + side * headW * 0.82f - 4f, headTop + headH * 0.43f),
+                    androidx.compose.ui.geometry.Size(9f, headH * 0.20f), style = Stroke(width = 1.5f))
             }
-            drawLine(bright, Offset(cx, cy - radius * 0.02f), Offset(cx - radius * 0.06f, cy + radius * 0.24f), 2f)
-            val mouthHeight = if (talking) radius * (0.08f + kotlin.math.abs(kotlin.math.sin(phase * 8f)) * 0.18f) else radius * 0.035f
-            drawOval(
-                color = bright,
-                topLeft = Offset(cx - radius * 0.22f, cy + radius * 0.43f - mouthHeight / 2f),
-                size = androidx.compose.ui.geometry.Size(radius * 0.44f, mouthHeight.coerceAtLeast(3f))
-            )
-            // Floating particles.
-            for (i in 0 until 24) {
-                val a = phase + i * 0.2618f
-                val orbit = radius * (1.48f + (i % 3) * 0.12f)
-                drawCircle(cyan.copy(alpha = 0.72f), 2f + (i % 2), Offset(cx + kotlin.math.cos(a) * orbit, cy + kotlin.math.sin(a) * orbit * 0.78f))
+            // Curved latitude and longitude mesh over the face.
+            for (row in 1..13) {
+                val t = row / 14f
+                val y = headTop + headH * t
+                val half = headW * kotlin.math.sqrt((1f - (2f * t - 1f) * (2f * t - 1f)).coerceAtLeast(0.08f)) * 0.91f
+                val mesh = Path().apply {
+                    moveTo(headCx - half, y)
+                    quadraticTo(headCx, y + kotlin.math.sin(t * 3.14159f) * 5f, headCx + half, y)
+                }
+                drawPath(mesh, pale.copy(alpha = 0.62f), style = Stroke(width = 1f))
+            }
+            for (col in -6..6) {
+                val offset = col / 7f
+                val mesh = Path().apply {
+                    moveTo(headCx + offset * headW * 0.10f, headTop + 2f)
+                    cubicTo(headCx + offset * headW * 0.82f, headTop + headH * 0.30f,
+                        headCx + offset * headW * 0.80f, headTop + headH * 0.72f,
+                        headCx + offset * headW * 0.40f, headBottom - 3f)
+                }
+                drawPath(mesh, cyan.copy(alpha = 0.58f), style = Stroke(width = 1f))
+            }
+            // Bright eyes, subtle blink, nose and speaking mouth.
+            val eyeY = headTop + headH * 0.48f
+            val eyeH = (headH * 0.045f * (1f - blink * 0.88f)).coerceAtLeast(2f)
+            for (side in listOf(-1f, 1f)) {
+                val ex = headCx + side * headW * 0.40f
+                drawOval(cyan.copy(alpha = 0.32f), Offset(ex - headW * 0.19f, eyeY - eyeH * 1.8f),
+                    androidx.compose.ui.geometry.Size(headW * 0.38f, eyeH * 3.6f))
+                drawOval(pale.copy(alpha = 0.98f), Offset(ex - headW * 0.13f, eyeY - eyeH / 2f),
+                    androidx.compose.ui.geometry.Size(headW * 0.26f, eyeH))
+            }
+            drawLine(pale.copy(alpha = 0.8f), Offset(headCx, eyeY + 4f),
+                Offset(headCx - 3f, headTop + headH * 0.72f), 1.5f)
+            val mouthY = headTop + headH * 0.83f
+            val mouthOpen = if (talking) 3f + kotlin.math.abs(kotlin.math.sin(phase * 8f)) * 7f else 2f
+            drawOval(pale.copy(alpha = 0.95f), Offset(headCx - headW * 0.20f, mouthY),
+                androidx.compose.ui.geometry.Size(headW * 0.40f, mouthOpen))
+            // Scanning line sweeps down through the head.
+            val scanY = headTop + headH * scan
+            drawLine(pale.copy(alpha = 0.92f), Offset(headCx - headW * 0.92f, scanY),
+                Offset(headCx + headW * 0.92f, scanY), 2f)
+            // Tiny particles around the projected bust.
+            for (i in 0 until 34) {
+                val a = phase + i * 0.184f
+                val rx = headW * (1.15f + (i % 4) * 0.25f)
+                val py = h * (0.42f + kotlin.math.sin(a * 1.7f) * 0.32f)
+                drawCircle(cyan.copy(alpha = 0.62f * pulse), 1.5f + (i % 2), Offset(cx + kotlin.math.cos(a) * rx, py))
             }
         }
     }
