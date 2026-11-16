@@ -551,13 +551,25 @@ private fun configureMaleVoice(engine: TextToSpeech, language: String) {
         else -> Locale.US
     }
     engine.language = locale
-    val maleHints = listOf("male", "david", "mark", "alex", "daniel", "aaron", "george", "james", "tom", "matthew", "guy")
-    val matchingVoices = engine.voices.orEmpty().filter { it.locale.language == locale.language }
+
+    // Prefer an explicitly male-labelled voice when the installed TTS engine exposes one.
+    val maleHints = listOf(
+        "male", "david", "mark", "daniel", "aaron", "george",
+        "james", "tom", "matthew", "guy", "baritone"
+    )
+    val matchingVoices = engine.voices.orEmpty()
+        .filter { it.locale.language == locale.language && !it.isNetworkConnectionRequired }
     val maleVoice = matchingVoices.firstOrNull { voice ->
         val voiceName = voice.name.lowercase(Locale.ROOT)
         maleHints.any { hint -> voiceName.contains(hint) }
     }
-    if (maleVoice != null) engine.voice = maleVoice
+    if (maleVoice != null) {
+        engine.voice = maleVoice
+    }
+
+    // Keep the voice lower and steadier if the device has no named male voice.
+    engine.setPitch(0.82f)
+    engine.setSpeechRate(0.94f)
 }
 
 @Composable
