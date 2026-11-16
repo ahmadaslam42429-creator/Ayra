@@ -677,17 +677,28 @@ private fun configureMaleVoice(engine: TextToSpeech, language: String, preferred
         engine.setSpeechRate(0.94f)
         return null
     }
-    val matchingVoices = engine.voices.orEmpty().filter { it.locale.language == locale.language }
-    val maleHints = listOf("male", "david", "mark", "daniel", "aaron", "george", "james", "tom", "matthew", "guy", "baritone")
-    val chosen = matchingVoices.firstOrNull { it.name == preferredVoiceName }
-        ?: matchingVoices.firstOrNull { voice ->
-            val name = voice.name.lowercase(Locale.ROOT)
-            maleHints.any { hint -> name.contains(hint) }
-        }
-    if (chosen != null) engine.voice = chosen
-    engine.setPitch(0.90f)
+    val matchingVoices = engine.voices.orEmpty()
+        .filter { it.locale.language == locale.language && !it.isNetworkConnectionRequired }
+    // Never keep a saved voice unless it also matches a male-voice hint.
+    // Android does not expose a reliable gender field for TTS voices, so use
+    // explicit voice-name hints and otherwise report that a male voice is unavailable.
+    val maleHints = listOf("male", "david", "mark", "daniel", "aaron", "george", "james", "tom", "matthew", "guy", "baritone", "-m", "_m", "male")
+    val isMaleHinted: (android.speech.tts.Voice) -> Boolean = { voice ->
+        val name = voice.name.lowercase(Locale.ROOT)
+        maleHints.any { hint -> name.contains(hint) }
+    }
+    val chosen = matchingVoices.firstOrNull { it.name == preferredVoiceName && isMaleHinted(it) }
+        ?: matchingVoices.firstOrNull(isMaleHinted)
+    if (chosen != null) {
+        engine.voice = chosen
+        engine.setPitch(1.0f)
+        engine.setSpeechRate(0.94f)
+        return chosen.name
+    }
+    // Do not pretend a lower pitch proves the voice is male.
+    engine.setPitch(1.0f)
     engine.setSpeechRate(0.94f)
-    return chosen?.name
+    return null
 }
 
 @Composable
