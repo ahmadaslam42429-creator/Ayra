@@ -577,140 +577,80 @@ private fun HologramView(listening: Boolean, thinking: Boolean, talking: Boolean
     val motion = rememberInfiniteTransition(label = "adam-hologram")
     val phase by motion.animateFloat(
         initialValue = 0f, targetValue = 6.28318f,
-        animationSpec = infiniteRepeatable(tween(4200, easing = LinearEasing)), label = "rotation"
-    )
-    val turn by motion.animateFloat(
-        initialValue = -0.72f, targetValue = 0.72f,
-        animationSpec = infiniteRepeatable(tween(2100, easing = LinearEasing), RepeatMode.Reverse),
-        label = "head-turn"
+        animationSpec = infiniteRepeatable(tween(3600, easing = LinearEasing)), label = "rotation"
     )
     val bob by motion.animateFloat(
-        initialValue = -11f, targetValue = 11f,
-        animationSpec = infiniteRepeatable(tween(1750, easing = LinearEasing), RepeatMode.Reverse),
+        initialValue = -7f, targetValue = 7f,
+        animationSpec = infiniteRepeatable(tween(1500, easing = LinearEasing), RepeatMode.Reverse),
         label = "float"
     )
-    val drift by motion.animateFloat(
-        initialValue = -9f, targetValue = 9f,
-        animationSpec = infiniteRepeatable(tween(2900, easing = LinearEasing), RepeatMode.Reverse),
-        label = "drift"
-    )
-    val scan by motion.animateFloat(
-        initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1600, easing = LinearEasing)), label = "scan"
-    )
-    val blinkPhase by motion.animateFloat(
-        initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(3000, easing = LinearEasing)), label = "blink"
-    )
     val pulse by motion.animateFloat(
-        initialValue = 0.65f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(950, easing = LinearEasing), RepeatMode.Reverse),
+        initialValue = 0.72f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Reverse),
         label = "glow"
     )
-
-    Column(Modifier.fillMaxWidth().height(260.dp)) {
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            Canvas(Modifier.fillMaxSize()) {
-                val cx = size.width * 0.5f + drift
-                val cy = size.height * 0.46f
-                val scale = minOf(size.width * 0.39f, size.height * 0.39f)
-                val yaw = turn + if (listening) kotlin.math.sin(phase * 2f) * 0.16f else 0f
-                val roll = kotlin.math.sin(phase * 0.65f) * 0.10f
-                val cyan = Color(0xFF42DFFF)
-                val bright = Color(0xFF9BFFFF)
-                fun point(u: Float, v: Float): Offset {
-                    val width = kotlin.math.sqrt(maxOf(0.001f, 1f - v * v)) * (0.76f - 0.07f * v)
-                    val depth = kotlin.math.sqrt(maxOf(0.001f, 1f - v * v)) *
-                        kotlin.math.sqrt(maxOf(0.02f, 1f - u * u)) * 0.66f
-                    val x = u * width
-                    val rotatedX = x * kotlin.math.cos(yaw) + depth * kotlin.math.sin(yaw)
-                    val z = -x * kotlin.math.sin(yaw) + depth * kotlin.math.cos(yaw)
-                    val perspective = 3.6f / (3.6f - z)
-                    val localX = rotatedX * kotlin.math.cos(roll) - v * kotlin.math.sin(roll)
-                    val localY = rotatedX * kotlin.math.sin(roll) + v * kotlin.math.cos(roll)
-                    return Offset(
-                        cx + localX * scale * perspective,
-                        cy + bob - localY * scale * perspective
-                    )
+    val cyan = Color(0xFF42DFFF)
+    val bright = Color(0xFFB8FFFF)
+    Column(Modifier.fillMaxWidth().height(270.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = when { talking -> "ADAM IS SPEAKING"; thinking -> "ADAM IS THINKING"; listening -> "ADAM IS LISTENING"; else -> "ADAM • HOLOGRAM ACTIVE" },
+            modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+            color = bright, style = MaterialTheme.typography.labelSmall
+        )
+        Canvas(Modifier.fillMaxWidth().weight(1f).background(Color(0xFF090D18))) {
+            val cx = size.width / 2f
+            val cy = size.height * 0.47f + bob
+            val radius = minOf(size.width * 0.29f, size.height * 0.39f).coerceAtLeast(42f)
+            // Bright outer glow and animated orbital rings.
+            drawCircle(cyan.copy(alpha = 0.10f * pulse), radius * 1.48f, Offset(cx, cy))
+            for (i in 0..2) {
+                val angle = phase * (if (i == 1) -1f else 1f) + i * 1.05f
+                val rx = radius * (1.30f + i * 0.12f)
+                val ry = radius * (0.20f + i * 0.035f)
+                val path = Path()
+                for (step in 0..80) {
+                    val a = step / 80f * 6.28318f + angle
+                    val p = Offset(cx + kotlin.math.cos(a) * rx, cy + radius * 0.78f + kotlin.math.sin(a) * ry)
+                    if (step == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
                 }
-                drawCircle(Color(0x2225DFFF), radius = scale * 1.15f, center = Offset(cx, cy + bob * 0.25f))
-                // Moving halo rings around the floating head.
-                for (ring in 0..2) {
-                    val path = Path()
-                    for (step in 0..80) {
-                        val a = step / 80f * 6.28318f + phase * (if (ring == 1) -0.7f else 0.45f)
-                        val rx = scale * (0.78f + ring * 0.13f)
-                        val ry = scale * (0.13f + ring * 0.025f)
-                        val p = Offset(cx + kotlin.math.cos(a) * rx, cy + scale * 0.78f + bob * 0.35f + kotlin.math.sin(a) * ry)
-                        if (step == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
-                    }
-                    drawPath(path, cyan.copy(alpha = 0.32f + ring * 0.08f), style = Stroke(width = 1.1f))
-                }
-                // Wireframe latitude lines.
-                for (row in 0..20) {
-                    val v = -0.96f + row * 0.096f
-                    val path = Path()
-                    for (col in 0..56) {
-                        val p = point(-0.99f + col * 0.03535f, v)
-                        if (col == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
-                    }
-                    drawPath(path, cyan.copy(alpha = 0.38f * pulse), style = Stroke(width = 1f))
-                }
-                // Wireframe meridians.
-                for (col in 0..28) {
-                    val u = -0.98f + col * 0.07f
-                    val path = Path()
-                    for (row in 0..44) {
-                        val p = point(u, -0.98f + row * 0.0445f)
-                        if (row == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
-                    }
-                    drawPath(path, cyan.copy(alpha = 0.42f * pulse), style = Stroke(width = 0.9f))
-                }
-                fun feature(points: List<Pair<Float, Float>>, color: Color = bright, width: Float = 2f) {
-                    val path = Path()
-                    points.forEachIndexed { index, pair ->
-                        val p = point(pair.first, pair.second)
-                        if (index == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
-                    }
-                    drawPath(path, color.copy(alpha = pulse), style = Stroke(width = width))
-                }
-                val blink = if (blinkPhase > 0.94f) 0.025f else 1f
-                for (side in listOf(-1f, 1f)) {
-                    val x = side * 0.31f
-                    feature(listOf(
-                        (x - 0.14f) to 0.15f, (x - 0.07f) to (0.15f + 0.045f * blink),
-                        x to (0.15f + 0.055f * blink), (x + 0.07f) to (0.15f + 0.045f * blink),
-                        (x + 0.14f) to 0.15f
-                    ), bright, 2.5f)
-                    feature(listOf((x - 0.13f) to 0.27f, x to 0.30f, (x + 0.13f) to 0.27f), cyan, 1.2f)
-                    drawCircle(bright, radius = scale * 0.022f, center = point(x, 0.16f))
-                }
-                feature(listOf(0f to 0.13f, 0f to -0.04f, -0.05f to -0.13f, 0f to -0.16f, 0.05f to -0.13f), bright, 1.8f)
-                val mouthOpen = if (talking) 0.035f + kotlin.math.abs(kotlin.math.sin(phase * 15f)) * 0.13f else 0.012f
-                feature(listOf(
-                    -0.19f to -0.34f, -0.10f to (-0.33f + mouthOpen),
-                    0f to (-0.34f + mouthOpen * 1.2f), 0.10f to (-0.33f + mouthOpen),
-                    0.19f to -0.34f
-                ), bright, 2.4f)
-                feature(listOf(-0.18f to -0.37f, -0.09f to -0.39f, 0f to -0.40f, 0.09f to -0.39f, 0.18f to -0.37f), cyan, 1.2f)
-                feature(listOf(-0.47f to -0.42f, -0.34f to -0.73f, 0f to -0.83f, 0.34f to -0.73f, 0.47f to -0.42f), cyan, 1f)
-                feature(listOf(-0.30f to -0.78f, -0.27f to -1.05f, 0f to -1.12f, 0.27f to -1.05f, 0.30f to -0.78f), cyan, 1.2f)
-                // Particles travel independently around the avatar.
-                for (i in 0 until 42) {
-                    val px = ((i * 43f + phase * 31f) % size.width)
-                    val py = ((i * 29f - phase * 25f) % size.height + size.height) % size.height
-                    drawCircle(cyan.copy(alpha = 0.42f), radius = 1.2f + (i % 3) * 0.5f, center = Offset(px, py))
-                }
-                val scanY = scan * size.height
-                drawLine(Color(0x6642EFFF), Offset(0f, scanY), Offset(size.width, scanY), strokeWidth = 10f)
-                drawLine(Color(0xAA8AFFFF), Offset(size.width * 0.12f, scanY), Offset(size.width * 0.88f, scanY), strokeWidth = 1.2f)
+                drawPath(path, cyan.copy(alpha = 0.60f * pulse), style = Stroke(width = 2f))
             }
-            Text(
-                text = when { talking -> "RESPONDING"; thinking -> "PROCESSING"; listening -> "LISTENING"; else -> "SYSTEM READY" },
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp),
-                color = Color(0xFF62FFF0),
-                style = MaterialTheme.typography.labelSmall
+            // Filled translucent head makes the avatar visible even on low-end devices.
+            drawCircle(Color(0xFF102D43).copy(alpha = 0.92f), radius, Offset(cx, cy))
+            drawCircle(cyan.copy(alpha = 0.95f * pulse), radius, Offset(cx, cy), style = Stroke(width = 2.5f))
+            drawOval(
+                color = cyan.copy(alpha = 0.24f),
+                topLeft = Offset(cx - radius * 0.80f, cy - radius * 1.05f),
+                size = androidx.compose.ui.geometry.Size(radius * 1.60f, radius * 2.10f),
+                style = Stroke(width = 1.2f)
             )
+            // Face grid and animated scan line.
+            for (i in -3..3) {
+                val x = cx + i * radius * 0.22f
+                drawLine(cyan.copy(alpha = 0.22f), Offset(x, cy - radius * 0.78f), Offset(x, cy + radius * 0.78f), 1f)
+            }
+            val scanY = cy - radius * 0.72f + ((phase / 6.28318f) * radius * 1.44f)
+            drawLine(bright.copy(alpha = 0.70f), Offset(cx - radius * 0.82f, scanY), Offset(cx + radius * 0.82f, scanY), 2f)
+            // Eyes, nose and mouth.
+            val eyeY = cy - radius * 0.12f
+            for (side in listOf(-1f, 1f)) {
+                val eyeX = cx + side * radius * 0.34f
+                drawCircle(bright, radius * 0.075f, Offset(eyeX, eyeY))
+                drawLine(cyan, Offset(eyeX - radius * 0.15f, eyeY - radius * 0.13f), Offset(eyeX + radius * 0.15f, eyeY - radius * 0.13f), 2f)
+            }
+            drawLine(bright, Offset(cx, cy - radius * 0.02f), Offset(cx - radius * 0.06f, cy + radius * 0.24f), 2f)
+            val mouthHeight = if (talking) radius * (0.08f + kotlin.math.abs(kotlin.math.sin(phase * 8f)) * 0.18f) else radius * 0.035f
+            drawOval(
+                color = bright,
+                topLeft = Offset(cx - radius * 0.22f, cy + radius * 0.43f - mouthHeight / 2f),
+                size = androidx.compose.ui.geometry.Size(radius * 0.44f, mouthHeight.coerceAtLeast(3f))
+            )
+            // Floating particles.
+            for (i in 0 until 24) {
+                val a = phase + i * 0.2618f
+                val orbit = radius * (1.48f + (i % 3) * 0.12f)
+                drawCircle(cyan.copy(alpha = 0.72f), 2f + (i % 2), Offset(cx + kotlin.math.cos(a) * orbit, cy + kotlin.math.sin(a) * orbit * 0.78f))
+            }
         }
     }
 }
