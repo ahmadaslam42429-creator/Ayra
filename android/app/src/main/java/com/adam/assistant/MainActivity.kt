@@ -101,6 +101,9 @@ private fun AdamApp() {
         }
     }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    var ttsVoices by remember { mutableStateOf(listOf<android.speech.tts.Voice>()) }
+    var selectedVoiceName by remember { mutableStateOf(prefs.getString("tts_voice", "") ?: "") }
+    var voiceMenuExpanded by remember { mutableStateOf(false) }
     var liveStatus by remember { mutableStateOf("Live voice is off") }
     var liveVoiceActive by remember { mutableStateOf(false) }
     var screenContext by remember { mutableStateOf("") }
@@ -108,7 +111,9 @@ private fun AdamApp() {
     DisposableEffect(Unit) {
         val engine = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                configureMaleVoice(engine, language)
+                ttsVoices = engine.voices.orEmpty().filter { it.locale.language == ttsLocale(language).language }.sortedBy { it.name }
+                val savedVoice = selectedVoiceName.takeIf { name -> ttsVoices.any { it.name == name } }
+                selectedVoiceName = configureMaleVoice(engine, language, savedVoice) ?: ""
             }
         }
         tts = engine
@@ -449,6 +454,23 @@ private fun AdamApp() {
                                 }
                             }
                         }
+                        Text("Speech voice")
+                        ExposedDropdownMenuBox(expanded = voiceMenuExpanded, onExpandedChange = { voiceMenuExpanded = !voiceMenuExpanded }) {
+                            OutlinedTextField(
+                                value = ttsVoices.firstOrNull { it.name == selectedVoiceName }?.name ?: "Automatic voice (male if available)",
+                                onValueChange = {}, readOnly = true, modifier = Modifier.menuAnchor()
+                            )
+                            ExposedDropdownMenu(expanded = voiceMenuExpanded, onDismissRequest = { voiceMenuExpanded = false }) {
+                                DropdownMenuItem(text = { Text("Automatic (prefer male)") }, onClick = { selectedVoiceName = ""; voiceMenuExpanded = false })
+                                ttsVoices.forEach { voice ->
+                                    DropdownMenuItem(
+                                        text = { Text(voice.name + if (voice.isNetworkConnectionRequired) " (online)" else "") },
+                                        onClick = { selectedVoiceName = voice.name; voiceMenuExpanded = false }
+                                    )
+                                }
+                            }
+                        }
+                        Text("Choose a voice installed by your Android text-to-speech engine. Male voices depend on the voices your phone provides.", style = MaterialTheme.typography.bodySmall, color = Color.LightGray)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(checked = speakReplies, onCheckedChange = { speakReplies = it })
                             Text("Speak AI replies aloud")
@@ -475,8 +497,11 @@ private fun AdamApp() {
                     }
                 },
                 confirmButton = { TextButton(onClick = {
-                    prefs.edit().remove("gemini_key").putString("language", language).putBoolean("speak", speakReplies).putBoolean("google_search", false).putBoolean("wake_word", wakeWordEnabled).apply()
-                    tts?.let { configureMaleVoice(it, language) }
+                    prefs.edit().remove("gemini_key").putString("language", language).putBoolean("speak", speakReplies).putBoolean("google_search", false).putBoolean("wake_word", wakeWordEnabled).putString("tts_voice", selectedVoiceName).apply()
+                    tts?.let { engine ->
+                        ttsVoices = engine.voices.orEmpty().filter { it.locale.language == ttsLocale(language).language }.sortedBy { it.name }
+                        selectedVoiceName = configureMaleVoice(engine, language, selectedVoiceName.takeIf { name -> ttsVoices.any { it.name == name } }) ?: ""
+                    }
                     showSettings = false
                 }) { Text("Save") } },
                 dismissButton = { TextButton(onClick = { showSettings = false }) { Text("Cancel") } }
@@ -544,32 +569,31 @@ private fun AdamApp() {
 
 
 
-private fun configureMaleVoice(engine: TextToSpeech, language: String) {
-    val locale = when (language) {
-        "Urdu" -> Locale("ur", "PK")
-        "Hindi" -> Locale("hi", "IN")
-        else -> Locale.US
-    }
-    engine.language = locale
+private fun ttsLocale(language: String): Locale = when (language) {
+    "Urdu" -> Locale("ur", "PK")
+    "Hindi" -> Locale("hi", "IN")
+    else -> Locale.US
+}
 
-    // Prefer an explicitly male-labelled voice when the installed TTS engine exposes one.
-    val maleHints = listOf(
-        "male", "david", "mark", "daniel", "aaron", "george",
-        "james", "tom", "matthew", "guy", "baritone"
-    )
-    val matchingVoices = engine.voices.orEmpty()
-        .filter { it.locale.language == locale.language && !it.isNetworkConnectionRequired }
-    val maleVoice = matchingVoices.firstOrNull { voice ->
-        val voiceName = voice.name.lowercase(Locale.ROOT)
-        maleHints.any { hint -> voiceName.contains(hint) }
+private fun configureMaleVoice(engine: TextToSpeech, language: String, preferredVoiceName: String? = null): String? {
+    val locale = ttsLocale(language)
+    val languageResult = engine.setLanguage(locale)
+    if (languageResult == TextToSpeech.LANG_MISSING_DATA || languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+        engine.setPitch(0.90f)
+        engine.setSpeechRate(0.94f)
+        return null
     }
-    if (maleVoice != null) {
-        engine.voice = maleVoice
-    }
-
-    // Keep the voice lower and steadier if the device has no named male voice.
-    engine.setPitch(0.82f)
+    val matchingVoices = engine.voices.orEmpty().filter { it.locale.language == locale.language }
+    val maleHints = listOf("male", "david", "mark", "daniel", "aaron", "george", "james", "tom", "matthew", "guy", "baritone")
+    val chosen = matchingVoices.firstOrNull { it.name == preferredVoiceName }
+        ?: matchingVoices.firstOrNull { voice ->
+            val name = voice.name.lowercase(Locale.ROOT)
+            maleHints.any { hint -> name.contains(hint) }
+        }
+    if (chosen != null) engine.voice = chosen
+    engine.setPitch(0.90f)
     engine.setSpeechRate(0.94f)
+    return chosen?.name
 }
 
 @Composable
