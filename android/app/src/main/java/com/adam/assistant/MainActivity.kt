@@ -111,9 +111,11 @@ private fun AdamApp() {
     DisposableEffect(Unit) {
         val engine = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                ttsVoices = engine.voices.orEmpty().filter { it.locale.language == ttsLocale(language).language }.sortedBy { it.name }
-                val savedVoice = selectedVoiceName.takeIf { name -> ttsVoices.any { it.name == name } }
-                selectedVoiceName = configureMaleVoice(engine, language, savedVoice) ?: ""
+                tts?.let { readyEngine ->
+                    ttsVoices = readyEngine.voices.orEmpty().filter { it.locale.language == ttsLocale(language).language }.sortedBy { it.name }
+                    val savedVoice = selectedVoiceName.takeIf { name -> ttsVoices.any { it.name == name } }
+                    selectedVoiceName = configureMaleVoice(readyEngine, language, savedVoice) ?: ""
+                }
             }
         }
         tts = engine
