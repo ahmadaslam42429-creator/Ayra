@@ -648,7 +648,7 @@ private fun HologramView(listening: Boolean, thinking: Boolean, talking: Boolean
                 }
                 // Horizontal moving hologram scan band
                 val scanY = scan * size.height
-                drawLine(Color.Transparent, Color(0x5538EAFF), Offset(0f, scanY), Offset(size.width, scanY), strokeWidth = 12f)
+                drawLine(color = Color(0x5538EAFF), start = Offset(0f, scanY), end = Offset(size.width, scanY), strokeWidth = 12f)
                 // Ground/orbit rings
                 drawOval(cyan.copy(alpha = 0.35f), topLeft = Offset(cx - scale * 0.72f, cy + scale * 0.68f), size = androidx.compose.ui.geometry.Size(scale * 1.44f, scale * 0.25f), style = Stroke(width = 1f))
             }
