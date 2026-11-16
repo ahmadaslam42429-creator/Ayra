@@ -1,22 +1,16 @@
 package com.adam.assistant
 
 import android.accessibilityservice.AccessibilityService
-import android.content.Intent
-import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import android.os.Handler
-import android.os.Looper
 
 class AdamScreenAccessibilityService : AccessibilityService() {
     companion object {
         @Volatile private var active: AdamScreenAccessibilityService? = null
 
-        fun performVoiceCommand(command: String): String? =
-            active?.performCommand(command)
+        fun performVoiceCommand(command: String): String =
+            active?.performCommand(command) ?: "ADAM app control is not connected. Open Device tools → Enable ADAM app control permission, then enable ADAM in Android Accessibility settings."
     }
-
-    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -54,35 +48,29 @@ class AdamScreenAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun performCommand(raw: String): String? {
+    private fun performCommand(raw: String): String {
         val command = raw.trim()
         val lower = command.lowercase()
-        val protectedActions = listOf(
-            "send", "publish", "post", "delete", "remove", "pay", "purchase", "buy",
-            "send message", "send whatsapp", "send sms", "publish post", "like", "share"
-        )
+        val protectedActions = listOf("send", "publish", "post", "delete", "remove", "pay", "purchase", "buy", "like", "share")
         if (protectedActions.any { lower.startsWith(it) } ||
             listOf("بھیج دو", "پوسٹ کر دو", "ڈیلیٹ", "خرید لو", "پیسے ادا").any { lower.contains(it) }) {
-            return when {
-                lower.contains("post") || lower.contains("publish") || lower.contains("پوسٹ") ->
-                    "I can prepare the post, but you must review and tap Publish yourself."
-                else -> "I can prepare the message or form, but you must review and confirm the final action yourself."
-            }
+            return if (lower.contains("post") || lower.contains("publish") || lower.contains("پوسٹ"))
+                "I can prepare the post, but you must review and tap Publish yourself."
+            else "I can prepare the message or form, but you must review and confirm the final action yourself."
         }
 
-        val root = rootInActiveWindow ?: return null
+        val root = rootInActiveWindow
+            ?: return "ADAM is connected, but Android did not expose the current app screen. Try again after the screen finishes loading."
         try {
             if (lower in listOf("go back", "back", "واپس", "پیچھے", "वापस")) {
-                performGlobalAction(GLOBAL_ACTION_BACK)
-                return "Going back."
+                val ok = performGlobalAction(GLOBAL_ACTION_BACK)
+                return if (ok) "Going back." else "Android could not go back on this screen."
             }
             if (lower in listOf("scroll down", "نیچے کرو", "نیچے اسکرول", "नीचे स्क्रॉल")) {
-                root.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
-                return "Scrolling down."
+                return if (scroll(root, true)) "Scrolling down." else "I couldn't find a scrollable area on this screen."
             }
             if (lower in listOf("scroll up", "اوپر کرو", "اوپر اسکرول", "ऊपर स्क्रॉल")) {
-                root.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
-                return "Scrolling up."
+                return if (scroll(root, false)) "Scrolling up." else "I couldn't find a scrollable area on this screen."
             }
 
             val clickPrefixes = listOf("tap ", "click ", "press ", "کھولو بٹن ", "دباؤ ", "کلک کرو ")
@@ -90,12 +78,13 @@ class AdamScreenAccessibilityService : AccessibilityService() {
                 if (lower.startsWith(p)) command.substring(p.length).trim() else null
             }
             if (!clickTarget.isNullOrBlank()) {
-                val node = findNode(root, clickTarget) ?: return "I can't find the '$clickTarget' control on this screen."
+                val node = findNode(root, clickTarget)
+                    ?: return "I can't find the '$clickTarget' control on this screen. Try using the exact visible label."
                 val clickable = clickableParent(node)
                 val success = clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                clickable.recycle()
                 node.recycle()
-                if (clickable !== node) clickable.recycle()
-                return if (success) "Tapped $clickTarget." else "That control isn't clickable right now."
+                return if (success) "Tapped $clickTarget." else "I found '$clickTarget', but Android would not let ADAM tap it."
             }
 
             val typePrefixes = listOf("type ", "write ", "enter ", "لکھو ", "ٹائپ کرو ", "لکھ دیں ")
@@ -103,23 +92,54 @@ class AdamScreenAccessibilityService : AccessibilityService() {
                 if (lower.startsWith(p)) command.substring(p.length) else null
             }
             if (!textToType.isNullOrBlank()) {
-                val field = findEditable(root) ?: return "I can't find a text field on this screen."
+                val field = findEditable(root) ?: return "I can't find an editable text field on this screen."
                 val args = android.os.Bundle().apply {
                     putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, textToType)
                 }
                 val success = field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
                 field.recycle()
-                return if (success) "Text entered. Please review it before sending or publishing." else "I couldn't enter text in that field."
+                return if (success) "Text entered. Please review it before sending or publishing." else "Android blocked text entry in that field."
             }
-            return null
+            return "I didn't recognize that app-control command. Try: tap [button], type [text], scroll up/down, or go back."
         } finally {
             root.recycle()
         }
     }
 
+    private fun scroll(root: AccessibilityNodeInfo, forward: Boolean): Boolean {
+        val action = if (forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+        fun walk(node: AccessibilityNodeInfo?, depth: Int): Boolean {
+            if (node == null || depth > 18) return false
+            if (node.isVisibleToUser && node.isScrollable && node.performAction(action)) return true
+            for (i in 0 until node.childCount) {
+                val child = node.getChild(i) ?: continue
+                val done = try { walk(child, depth + 1) } finally { child.recycle() }
+                if (done) return true
+            }
+            return false
+        }
+        return walk(root, 0)
+    }
+
     private fun findNode(root: AccessibilityNodeInfo, target: String): AccessibilityNodeInfo? {
-        val found = root.findAccessibilityNodeInfosByText(target)
-        return found.firstOrNull { it.isVisibleToUser } ?: found.firstOrNull()
+        val needle = target.trim().lowercase()
+        fun walk(node: AccessibilityNodeInfo?, depth: Int): AccessibilityNodeInfo? {
+            if (node == null || depth > 18) return null
+            val text = node.text?.toString().orEmpty()
+            val description = node.contentDescription?.toString().orEmpty()
+            if (node.isVisibleToUser &&
+                (text.equals(target, true) || description.equals(target, true) ||
+                 text.contains(needle, true) || description.contains(needle, true))) {
+                return AccessibilityNodeInfo.obtain(node)
+            }
+            for (i in 0 until node.childCount) {
+                val child = node.getChild(i) ?: continue
+                val found = try { walk(child, depth + 1) } finally { child.recycle() }
+                if (found != null) return found
+            }
+            return null
+        }
+        return walk(root, 0)
     }
 
     private fun clickableParent(original: AccessibilityNodeInfo): AccessibilityNodeInfo {
@@ -138,7 +158,8 @@ class AdamScreenAccessibilityService : AccessibilityService() {
             if (node == null || depth > 18) return null
             if (node.isEditable && node.isVisibleToUser) return AccessibilityNodeInfo.obtain(node)
             for (i in 0 until node.childCount) {
-                val result = walk(node.getChild(i), depth + 1)
+                val child = node.getChild(i) ?: continue
+                val result = try { walk(child, depth + 1) } finally { child.recycle() }
                 if (result != null) return result
             }
             return null
