@@ -1,4 +1,4 @@
-package com.ayra.assistant
+package com.adam.assistant
 
 import android.Manifest
 import android.content.Intent
@@ -56,7 +56,7 @@ import okhttp3.MediaType.Companion.toMediaType
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { AyraApp() }
+        setContent { AdamApp() }
     }
 }
 
@@ -64,11 +64,11 @@ private data class ChatLine(val text: String, val fromUser: Boolean)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AyraApp() {
+private fun AdamApp() {
     val context = LocalContext.current
     val httpClient = remember { OkHttpClient() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
-    val prefs = remember { context.getSharedPreferences("ayra", 0) }
+    val prefs = remember { context.getSharedPreferences("adam", 0) }
     var language by remember { mutableStateOf(prefs.getString("language", "English") ?: "English") }
     var showSettings by remember { mutableStateOf(false) }
     var input by remember { mutableStateOf("") }
@@ -205,7 +205,7 @@ private fun AyraApp() {
         }
         requestMessages.put(JSONObject()
             .put("role", "system")
-            .put("content", "You are AYRA, a helpful friendly AI companion. $languageInstruction Keep answers concise and useful. If screen text is supplied, use it only as context for the user’s question; mention when the screen text is insufficient.\n\nVisible screen text (captured by the user-enabled Accessibility service): ${prefs.getString("screen_context", "").orEmpty().take(10000)}"))
+            .put("content", "You are ADAM, a helpful friendly AI companion. $languageInstruction Keep answers concise and useful. If screen text is supplied, use it only as context for the user’s question; mention when the screen text is insufficient.\n\nVisible screen text (captured by the user-enabled Accessibility service): ${prefs.getString("screen_context", "").orEmpty().take(10000)}"))
         history.takeLast(14).forEach { line ->
             requestMessages.put(JSONObject()
                 .put("role", if (line.fromUser) "user" else "assistant")
@@ -247,7 +247,7 @@ private fun AyraApp() {
                 busy = false
                 history.add(ChatLine(answer, false))
                 persist()
-                if (speakReplies) tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "ayra-reply")
+                if (speakReplies) tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "adam-reply")
             }
         }
     }
@@ -268,8 +268,8 @@ private fun AyraApp() {
 
     val livePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
-            val serviceIntent = Intent(context, AyraLiveVoiceService::class.java)
-                .setAction(AyraLiveVoiceService.ACTION_START)
+            val serviceIntent = Intent(context, AdamLiveVoiceService::class.java)
+                .setAction(AdamLiveVoiceService.ACTION_START)
                 .putExtra("language", language)
             runCatching { ContextCompat.startForegroundService(context, serviceIntent) }
                 .onSuccess { liveVoiceActive = true; liveStatus = "Live voice is active in the background." }
@@ -280,8 +280,8 @@ private fun AyraApp() {
     fun startLive() {
         wakeWordEnabled = false
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            val serviceIntent = Intent(context, AyraLiveVoiceService::class.java)
-                .setAction(AyraLiveVoiceService.ACTION_START)
+            val serviceIntent = Intent(context, AdamLiveVoiceService::class.java)
+                .setAction(AdamLiveVoiceService.ACTION_START)
                 .putExtra("language", language)
             runCatching { ContextCompat.startForegroundService(context, serviceIntent) }
                 .onSuccess { liveVoiceActive = true; liveStatus = "Live voice is active in the background." }
@@ -290,7 +290,7 @@ private fun AyraApp() {
     }
 
     fun stopLive() {
-        runCatching { context.startService(Intent(context, AyraLiveVoiceService::class.java).setAction(AyraLiveVoiceService.ACTION_STOP)) }
+        runCatching { context.startService(Intent(context, AdamLiveVoiceService::class.java).setAction(AdamLiveVoiceService.ACTION_STOP)) }
         liveVoiceActive = false
         liveStatus = "Live voice is off"
     }
@@ -321,7 +321,7 @@ private fun AyraApp() {
                 val phrases = bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
                 val heard = phrases.joinToString(" ").lowercase(Locale.ROOT)
                     .replace("-", " ").replace(",", " ")
-                if (heard.contains("hey ayra") || heard.contains("hey ira") || heard.contains("hey aira")) {
+                if (heard.contains("hey adam") || heard.contains("hey ira") || heard.contains("hey aira")) {
                     wakeWordEnabled = false
                     runCatching { recognizer.cancel() }
                     startLive()
@@ -356,7 +356,7 @@ private fun AyraApp() {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Column { Text("AYRA", color = Color(0xFF65E7F2)); Text("Your AI companion", style = MaterialTheme.typography.labelSmall) } },
+                    title = { Column { Text("ADAM", color = Color(0xFF65E7F2)); Text("Your AI companion", style = MaterialTheme.typography.labelSmall) } },
                     actions = {
                         TextButton(onClick = { showDeviceTools = true }) { Text("Device", color = Color(0xFF65E7F2)) }
                         TextButton(onClick = { if (liveVoiceActive) stopLive() else startLive() }) {
@@ -373,7 +373,7 @@ private fun AyraApp() {
                 Row(Modifier.fillMaxWidth().background(Color(0xFF101727)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f),
-                        placeholder = { Text("Message AYRA…") }, shape = RoundedCornerShape(24.dp),
+                        placeholder = { Text("Message ADAM…") }, shape = RoundedCornerShape(24.dp),
                         maxLines = 4
                     )
                     IconButton(onClick = {
@@ -422,13 +422,13 @@ private fun AyraApp() {
                         }
                     },
                     update = { webView ->
-                        webView.evaluateJavascript("if (typeof window.setTalking === 'function') { window.setTalking(${avatarTalking}); } else { window.__ayraTalking = ${avatarTalking}; }", null)
+                        webView.evaluateJavascript("if (typeof window.setTalking === 'function') { window.setTalking(${avatarTalking}); } else { window.__adamTalking = ${avatarTalking}; }", null)
                     },
                     modifier = Modifier.fillMaxWidth().height(245.dp)
                 )
                 if (history.isEmpty()) {
                     Spacer(Modifier.height(56.dp))
-                    Text("Hello, I'm AYRA", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF65E7F2))
+                    Text("Hello, I'm ADAM", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF65E7F2))
                     Text("Talk to me, ask anything, or use the microphone.", color = Color.LightGray)
                 }
                 LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -439,14 +439,14 @@ private fun AyraApp() {
                             }
                         }
                     }
-                    if (busy) item { Text("AYRA is thinking…", color = Color(0xFF65E7F2)) }
+                    if (busy) item { Text("ADAM is thinking…", color = Color(0xFF65E7F2)) }
                 }
             }
         }
         if (showSettings) {
             AlertDialog(
                 onDismissRequest = { showSettings = false },
-                title = { Text("AYRA Settings") },
+                title = { Text("ADAM Settings") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("Language")
@@ -477,8 +477,8 @@ private fun AyraApp() {
                                 }
                             )
                             Column {
-                                Text("Hey AYRA wake word")
-                                Text("Listens only while this app is open; say “Hey AYRA”.", style = MaterialTheme.typography.bodySmall, color = Color.LightGray)
+                                Text("Hey ADAM wake word")
+                                Text("Listens only while this app is open; say “Hey ADAM”.", style = MaterialTheme.typography.bodySmall, color = Color.LightGray)
                             }
                         }
                         Text("Online messages are sent to OVHcloud AI to generate replies. Chat history is stored on this device.", style = MaterialTheme.typography.bodySmall)
@@ -502,12 +502,12 @@ private fun AyraApp() {
                 title = { Text("Android device tools") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Enable AYRA's optional accessibility permission to let it read visible controls, tap buttons and enter text inside apps. Android will show its system permission screen; you can turn it off anytime.")
+                        Text("Enable ADAM's optional accessibility permission to let it read visible controls, tap buttons and enter text inside apps. Android will show its system permission screen; you can turn it off anytime.")
                         TextButton(onClick = {
                             runCatching { context.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
                             showDeviceTools = false
-                        }, modifier = Modifier.fillMaxWidth()) { Text("Enable AYRA app control permission") }
-                        Text("AYRA can prepare messages and posts, but will leave Send, Publish, Delete and payment confirmations to you.")
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Enable ADAM app control permission") }
+                        Text("ADAM can prepare messages and posts, but will leave Send, Publish, Delete and payment confirmations to you.")
                         val actions = listOf(
                             "Wi-Fi" to android.provider.Settings.ACTION_WIFI_SETTINGS,
                             "Bluetooth" to android.provider.Settings.ACTION_BLUETOOTH_SETTINGS,

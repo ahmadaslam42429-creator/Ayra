@@ -1,4 +1,4 @@
-package com.ayra.assistant
+package com.adam.assistant
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
@@ -8,9 +8,9 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.os.Handler
 import android.os.Looper
 
-class AyraScreenAccessibilityService : AccessibilityService() {
+class AdamScreenAccessibilityService : AccessibilityService() {
     companion object {
-        @Volatile private var active: AyraScreenAccessibilityService? = null
+        @Volatile private var active: AdamScreenAccessibilityService? = null
 
         fun performVoiceCommand(command: String): String? =
             active?.performCommand(command)
@@ -44,7 +44,7 @@ class AyraScreenAccessibilityService : AccessibilityService() {
             collect(root, 0)
             val snapshot = lines.joinToString("\n").take(12000)
             if (snapshot.isNotBlank()) {
-                getSharedPreferences("ayra", MODE_PRIVATE).edit()
+                getSharedPreferences("adam", MODE_PRIVATE).edit()
                     .putString("screen_context", snapshot)
                     .putLong("screen_context_time", System.currentTimeMillis())
                     .apply()

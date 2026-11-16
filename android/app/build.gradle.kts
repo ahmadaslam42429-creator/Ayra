@@ -5,10 +5,10 @@ plugins {
 }
 
 android {
-    namespace = "com.ayra.assistant"
+    namespace = "com.adam.assistant"
     compileSdk = 35
     defaultConfig {
-        applicationId = "com.ayra.assistant"
+        applicationId = "com.adam.assistant"
         minSdk = 26
         targetSdk = 35
         versionCode = 4

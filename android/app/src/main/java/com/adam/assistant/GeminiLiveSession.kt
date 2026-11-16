@@ -1,4 +1,4 @@
-package com.ayra.assistant
+package com.adam.assistant
 
 import android.media.AudioAttributes
 import android.media.AudioFormat
@@ -52,7 +52,7 @@ class GeminiLiveSession(
             return
         }
         running = true
-        onStatus("Connecting to AYRA Live…")
+        onStatus("Connecting to ADAM Live…")
         val url = "$ENDPOINT?key=" + URLEncoder.encode(apiKey, "UTF-8")
         val request = Request.Builder().url(url).build()
         socket = client.newWebSocket(request, object : WebSocketListener() {
@@ -68,7 +68,7 @@ class GeminiLiveSession(
                         .put("systemInstruction", JSONObject()
                             .put("parts", org.json.JSONArray().put(JSONObject().put(
                                 "text",
-                                "You are AYRA, a friendly personal AI assistant. Speak naturally and concisely. Reply in $language unless the user asks for another language."
+                                "You are ADAM, a friendly personal AI assistant. Speak naturally and concisely. Reply in $language unless the user asks for another language."
                             ))))
                         .put("inputAudioTranscription", JSONObject())
                         .put("outputAudioTranscription", JSONObject())
@@ -85,7 +85,7 @@ class GeminiLiveSession(
                     val root = JSONObject(text)
                     if (root.has("setupComplete")) {
                         ready = true
-                        onStatus("Live voice connected. Speak to AYRA.")
+                        onStatus("Live voice connected. Speak to ADAM.")
                         startMicrophone(webSocket)
                     }
                     val serverContent = root.optJSONObject("serverContent")
@@ -102,7 +102,7 @@ class GeminiLiveSession(
                             val inline = parts.optJSONObject(i)?.optJSONObject("inlineData") ?: continue
                             val encoded = inline.optString("data")
                             if (encoded.isNotBlank()) {
-                                onStatus("AYRA is speaking…")
+                                onStatus("ADAM is speaking…")
                                 playAudio(Base64.decode(encoded, Base64.DEFAULT))
                             }
                         }
@@ -155,7 +155,7 @@ class GeminiLiveSession(
         }
         recorder = audioRecord
         audioRecord.startRecording()
-        thread(name = "ayra-live-mic") {
+        thread(name = "adam-live-mic") {
             val samples = ShortArray(2048)
             while (running && ready) {
                 val count = audioRecord.read(samples, 0, samples.size)

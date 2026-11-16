@@ -1,4 +1,4 @@
-package com.ayra.assistant
+package com.adam.assistant
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -26,11 +26,11 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
-class AyraLiveVoiceService : Service() {
+class AdamLiveVoiceService : Service() {
     companion object {
-        const val ACTION_START = "com.ayra.assistant.LIVE_START"
-        const val ACTION_STOP = "com.ayra.assistant.LIVE_STOP"
-        private const val CHANNEL_ID = "ayra_live_voice"
+        const val ACTION_START = "com.adam.assistant.LIVE_START"
+        const val ACTION_STOP = "com.adam.assistant.LIVE_STOP"
+        private const val CHANNEL_ID = "adam_live_voice"
         private const val NOTIFICATION_ID = 7301
     }
 
@@ -54,7 +54,7 @@ class AyraLiveVoiceService : Service() {
             stopSession()
             return START_NOT_STICKY
         }
-        val prefs = getSharedPreferences("ayra", MODE_PRIVATE)
+        val prefs = getSharedPreferences("adam", MODE_PRIVATE)
         language = intent?.getStringExtra("language")
             ?: prefs.getString("language", "English")
             ?: "English"
@@ -120,18 +120,18 @@ class AyraLiveVoiceService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, "AYRA live voice", NotificationManager.IMPORTANCE_LOW)
+            val channel = NotificationChannel(CHANNEL_ID, "ADAM live voice", NotificationManager.IMPORTANCE_LOW)
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
 
     private fun buildNotification(): Notification {
-        val stopIntent = Intent(this, AyraLiveVoiceService::class.java).setAction(ACTION_STOP)
+        val stopIntent = Intent(this, AdamLiveVoiceService::class.java).setAction(ACTION_STOP)
         val stopPending = PendingIntent.getService(this, 7302, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("AYRA live voice is active")
-            .setContentText("AYRA is listening. Tap Stop to end the session.")
+            .setContentTitle("ADAM live voice is active")
+            .setContentText("ADAM is listening. Tap Stop to end the session.")
             .setOngoing(true)
             .addAction(android.R.drawable.ic_media_pause, "Stop", stopPending)
             .build()
@@ -210,7 +210,7 @@ class AyraLiveVoiceService : Service() {
             saveLine(commandReply, false)
             processing = false
             speaking = true
-            val result = tts?.speak(commandReply, TextToSpeech.QUEUE_FLUSH, null, "ayra-live-command")
+            val result = tts?.speak(commandReply, TextToSpeech.QUEUE_FLUSH, null, "adam-live-command")
             if (result == TextToSpeech.ERROR || tts == null) {
                 speaking = false
                 scheduleListen(400)
@@ -218,7 +218,7 @@ class AyraLiveVoiceService : Service() {
             return
         }
 
-        val prefs = getSharedPreferences("ayra", MODE_PRIVATE)
+        val prefs = getSharedPreferences("adam", MODE_PRIVATE)
         val history = runCatching { JSONArray(prefs.getString("history", "[]") ?: "[]") }
             .getOrElse { JSONArray() }
         val messages = JSONArray()
@@ -229,7 +229,7 @@ class AyraLiveVoiceService : Service() {
         }
         messages.put(JSONObject().put("role", "system").put(
             "content",
-            "You are AYRA, a helpful real-time voice assistant. $instruction Follow the user's latest instruction directly. Keep spoken answers concise and conversational."
+            "You are ADAM, a helpful real-time voice assistant. $instruction Follow the user's latest instruction directly. Keep spoken answers concise and conversational."
         ))
         for (i in (history.length() - 14).coerceAtLeast(0) until history.length()) {
             val item = history.optJSONObject(i) ?: continue
@@ -240,7 +240,7 @@ class AyraLiveVoiceService : Service() {
         val payload = JSONObject().put("model", "Qwen3.8-27B").put("messages", messages)
             .put("max_tokens", 450).put("temperature", 0.6)
 
-        thread(name = "ayra-live-ai") {
+        thread(name = "adam-live-ai") {
             val answer = runCatching {
                 val request = Request.Builder()
                     .url("https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions")
@@ -264,7 +264,7 @@ class AyraLiveVoiceService : Service() {
                 saveLine(answer, false)
                 processing = false
                 speaking = true
-                val result = tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "ayra-live-reply")
+                val result = tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "adam-live-reply")
                 if (result == TextToSpeech.ERROR || tts == null) {
                     speaking = false
                     scheduleListen(500)
@@ -274,7 +274,7 @@ class AyraLiveVoiceService : Service() {
     }
 
     private fun runDeviceCommand(spoken: String): String? {
-        AyraScreenAccessibilityService.performVoiceCommand(spoken)?.let { return it }
+        AdamScreenAccessibilityService.performVoiceCommand(spoken)?.let { return it }
         val command = spoken.lowercase(Locale.ROOT).trim()
         val quickActions = listOf(
             listOf("open wifi", "open wi-fi", "wifi settings", "wi-fi settings", "وائی فائی کھولو", "وائی فائی سیٹنگز") to Intent(android.provider.Settings.ACTION_WIFI_SETTINGS),
@@ -326,7 +326,7 @@ class AyraLiveVoiceService : Service() {
     }
 
     private fun saveLine(text: String, fromUser: Boolean) {
-        val prefs = getSharedPreferences("ayra", MODE_PRIVATE)
+        val prefs = getSharedPreferences("adam", MODE_PRIVATE)
         val history = runCatching { JSONArray(prefs.getString("history", "[]") ?: "[]") }
             .getOrElse { JSONArray() }
         history.put(JSONObject().put("text", text).put("user", fromUser))

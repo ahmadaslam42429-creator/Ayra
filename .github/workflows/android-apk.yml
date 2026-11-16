@@ -1,4 +1,4 @@
-name: Build AYRA APK
+name: Build ADAM APK
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ on:
       - '.github/workflows/android-apk.yml'
 
 concurrency:
-  group: ayra-android-apk
+  group: adam-android-apk
   cancel-in-progress: true
 
 permissions:
@@ -36,7 +36,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AYRA-debug-apk
+          name: ADAM-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
@@ -44,8 +44,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ! gh release view ayra-latest >/dev/null 2>&1; then
-            gh release create ayra-latest --title "AYRA Android APK" --notes "Latest installable AYRA Android debug APK. Download app-debug.apk."
+          if ! gh release view adam-latest >/dev/null 2>&1; then
+            gh release create adam-latest --title "ADAM Android APK" --notes "Latest installable ADAM Android debug APK. Download app-debug.apk."
           fi
-          cp android/app/build/outputs/apk/debug/app-debug.apk AYRA.apk
-          gh release upload ayra-latest AYRA.apk --clobber
+          cp android/app/build/outputs/apk/debug/app-debug.apk ADAM.apk
+          gh release upload adam-latest ADAM.apk --clobber
