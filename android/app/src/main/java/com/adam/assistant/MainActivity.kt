@@ -135,6 +135,18 @@ private fun AdamApp() {
         prefs.edit().putString("history", arr.toString()).apply()
     }
 
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "image/*"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            runCatching { context.startActivity(Intent.createChooser(shareIntent, "Choose app to upload image")) }
+                .onFailure { history.add(ChatLine("Couldn't open an app to share that image.", false)); persist() }
+        }
+    }
+
     fun launchInstalledApp(command: String): Boolean {
         val appName = listOf("open ", "launch ", "start ")
             .firstNotNullOfOrNull { prefix ->
@@ -156,7 +168,78 @@ private fun AdamApp() {
     }
 
     fun handleDeviceCommand(message: String): Boolean {
-        val command = message.lowercase(Locale.ROOT)
+        val command = message.trim().lowercase(Locale.ROOT)
+
+        // Web and in-app search: ADAM opens the search results; the user chooses what to open.
+        val searchQuery = when {
+            command.startsWith("search youtube ") -> message.trim().substringAfter("search youtube ", "")
+                .let { "https://www.youtube.com/results?search_query=" + URLEncoder.encode(it, "UTF-8") }
+            command.startsWith("search google ") -> message.trim().substringAfter("search google ", "")
+                .let { "https://www.google.com/search?q=" + URLEncoder.encode(it, "UTF-8") }
+            command.startsWith("search ") -> message.trim().substringAfter("search ", "")
+                .let { "https://www.google.com/search?q=" + URLEncoder.encode(it, "UTF-8") }
+            command.startsWith("find ") -> message.trim().substringAfter("find ", "")
+                .let { "https://www.google.com/search?q=" + URLEncoder.encode(it, "UTF-8") }
+            else -> null
+        }
+        if (searchQuery != null) {
+            val ok = runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(searchQuery))) }.isSuccess
+            if (ok) {
+                history.add(ChatLine(message, true))
+                history.add(ChatLine("Opening search results. You can review and choose a result.", false))
+                persist()
+            }
+            return ok
+        }
+
+        // Compose an SMS, but never silently send it.
+        val smsPrefix = listOf("sms to ", "text to ", "message by sms to ").firstOrNull { command.startsWith(it) }
+        if (smsPrefix != null) {
+            val rest = message.trim().substring(smsPrefix.length).trim()
+            val number = rest.substringBefore(" ").trim()
+            val body = rest.substringAfter(" ", "").trim()
+            if (number.isBlank() || body.isBlank()) {
+                history.add(ChatLine("Use: SMS to 03XXXXXXXXX your message", false)); persist(); return true
+            }
+            val smsIntent = Intent(Intent.ACTION_SENDTO, android.net.Uri.parse("smsto:" + android.net.Uri.encode(number))).apply {
+                putExtra("sms_body", body)
+            }
+            val ok = runCatching { context.startActivity(smsIntent) }.isSuccess
+            if (ok) {
+                history.add(ChatLine(message, true))
+                history.add(ChatLine("SMS draft opened. Review the recipient and message, then tap Send yourself.", false))
+                persist()
+            }
+            return ok
+        }
+
+        // Share text to a compatible app. The receiving app owns its final publish/send action.
+        val sharePrefix = listOf("share text ", "prepare post ", "post draft ").firstOrNull { command.startsWith(it) }
+        if (sharePrefix != null) {
+            val draft = message.trim().substring(sharePrefix.length).trim()
+            if (draft.isBlank()) return false
+            val share = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, draft)
+            }
+            val ok = runCatching { context.startActivity(Intent.createChooser(share, "Choose app to share your draft")) }.isSuccess
+            if (ok) {
+                history.add(ChatLine(message, true))
+                history.add(ChatLine("Your draft is ready in the selected app. Review it and publish or send it yourself.", false))
+                persist()
+            }
+            return ok
+        }
+
+        // Pick an image, then hand it to a compatible app for the user to review/upload.
+        if (command in listOf("upload photo", "upload image", "share photo", "share image", "choose photo to upload")) {
+            history.add(ChatLine(message, true))
+            history.add(ChatLine("Choose an image. Android will let you select an app to receive it; confirm the upload inside that app.", false))
+            persist()
+            imagePicker.launch("image/*")
+            return true
+        }
+
         val target: Intent? = when {
             listOf("wifi settings", "wi-fi settings", "open wifi", "open wi-fi").any { command.contains(it) } ->
                 Intent(android.provider.Settings.ACTION_WIFI_SETTINGS)
@@ -200,6 +283,13 @@ private fun AdamApp() {
             launchInstalledApp(command)
         }
         if (target == null && !launched) {
+            val accessibilityResult = AdamScreenAccessibilityService.performVoiceCommand(message)
+            if (accessibilityResult != null) {
+                history.add(ChatLine(message, true))
+                history.add(ChatLine(accessibilityResult, false))
+                persist()
+                return true
+            }
             history.removeAt(history.lastIndex)
             return false
         }
@@ -226,7 +316,7 @@ private fun AdamApp() {
         }
         requestMessages.put(JSONObject()
             .put("role", "system")
-            .put("content", "You are ADAM, a helpful friendly AI companion. $languageInstruction Keep answers concise and useful. If screen text is supplied, use it only as context for the user’s question; mention when the screen text is insufficient.\n\nVisible screen text (captured by the user-enabled Accessibility service): ${prefs.getString("screen_context", "").orEmpty().take(10000)}"))
+            .put("content", "You are ADAM, a helpful friendly AI companion. $languageInstruction Keep answers concise and useful. Device actions: open [app name]; search [query]; search Google [query]; search YouTube [query]; SMS to [phone number] [message]; share text [draft]; prepare post [draft]; upload photo. SMS and social sharing open a review screen; never claim a message was sent or a post uploaded until the user completes it in the target app. For app navigation, use tap [visible label], type [text], scroll up, scroll down, and go back when the user asks. If screen text is supplied, use it only as context for the user’s question; mention when the screen text is insufficient.\n\nVisible screen text (captured by the user-enabled Accessibility service): ${prefs.getString("screen_context", "").orEmpty().take(10000)}"))
         history.takeLast(14).forEach { line ->
             requestMessages.put(JSONObject()
                 .put("role", if (line.fromUser) "user" else "assistant")
