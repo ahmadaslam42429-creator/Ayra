@@ -10,6 +10,7 @@ import android.speech.RecognitionListener
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.webkit.WebView
 import android.webkit.WebChromeClient
 import android.webkit.ConsoleMessage
@@ -105,6 +106,11 @@ private fun AdamApp() {
             }
         }
         tts = engine
+        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) { mainHandler.post { avatarTalking = true } }
+            override fun onDone(utteranceId: String?) { mainHandler.post { avatarTalking = false } }
+            override fun onError(utteranceId: String?) { mainHandler.post { avatarTalking = false } }
+        })
         onDispose { engine.stop(); engine.shutdown() }
     }
 
@@ -247,7 +253,10 @@ private fun AdamApp() {
                 busy = false
                 history.add(ChatLine(answer, false))
                 persist()
-                if (speakReplies) tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "adam-reply")
+                if (speakReplies) {
+                    avatarTalking = true
+                    tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "adam-reply")
+                }
             }
         }
     }
@@ -422,7 +431,7 @@ private fun AdamApp() {
                         }
                     },
                     update = { webView ->
-                        webView.evaluateJavascript("if (typeof window.setTalking === 'function') { window.setTalking(${avatarTalking}); } else { window.__adamTalking = ${avatarTalking}; }", null)
+                        webView.evaluateJavascript("if (typeof window.setState === 'function') { window.setState(" + liveVoiceActive + ", " + busy + ", " + avatarTalking + "); }", null)
                     },
                     modifier = Modifier.fillMaxWidth().height(245.dp)
                 )
