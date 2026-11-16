@@ -153,12 +153,17 @@ private fun AdamApp() {
                 if (command.startsWith(prefix)) command.removePrefix(prefix).trim() else null
             } ?: return false
         if (appName.isBlank()) return false
+        // Correct common speech-to-text misspellings of YouTube before matching installed apps.
+        val normalizedAppName = when (appName.lowercase(Locale.ROOT).replace(" ", "")) {
+            "yourube", "youtub", "yotube", "youtubee" -> "youtube"
+            else -> appName
+        }
         val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val apps = context.packageManager.queryIntentActivities(launcher, 0)
         val match = apps.firstOrNull {
-            it.loadLabel(context.packageManager).toString().trim().equals(appName, ignoreCase = true)
+            it.loadLabel(context.packageManager).toString().trim().equals(normalizedAppName, ignoreCase = true)
         } ?: apps.firstOrNull {
-            it.loadLabel(context.packageManager).toString().trim().contains(appName, ignoreCase = true)
+            it.loadLabel(context.packageManager).toString().trim().contains(normalizedAppName, ignoreCase = true)
         } ?: return false
         val launchIntent = Intent(Intent.ACTION_MAIN)
             .addCategory(Intent.CATEGORY_LAUNCHER)
