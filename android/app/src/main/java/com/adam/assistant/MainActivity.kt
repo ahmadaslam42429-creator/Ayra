@@ -287,7 +287,15 @@ private fun AdamApp() {
         } else {
             launchInstalledApp(command)
         }
-        if (target == null && !launched) {
+        // Only explicit on-screen control instructions may reach Accessibility.
+        // Ordinary chat/questions must always fall through to the AI chat request.
+        val isAccessibilityCommand = command in listOf("back", "go back", "scroll up", "scroll down",
+            "واپس", "پیچھے", "वापस", "نیچے کرو", "نیچے اسکرول", "ऊपर स्क्रॉल", "नीचे स्क्रॉल") ||
+            listOf("tap ", "click ", "press ", "type ", "write ", "enter ",
+                "کھولو بٹن ", "دباؤ ", "کلک کرو ", "لکھو ", "ٹائپ کرو ", "لکھ دیں ")
+                .any { command.startsWith(it) }
+
+        if (target == null && !launched && isAccessibilityCommand) {
             val accessibilityResult = AdamScreenAccessibilityService.performVoiceCommand(message)
             if (accessibilityResult != null) {
                 history.add(ChatLine(message, true))
