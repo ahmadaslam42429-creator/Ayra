@@ -569,11 +569,11 @@ private fun HologramView(listening: Boolean, thinking: Boolean, talking: Boolean
     )
     val scan by motion.animateFloat(
         initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(2600, easing = LinearEasing)), label = "scan"
+        animationSpec = infiniteRepeatable(tween(1700, easing = LinearEasing)), label = "scan"
     )
     val blinkPhase by motion.animateFloat(
         initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(4200, easing = LinearEasing)), label = "blink"
+        animationSpec = infiniteRepeatable(tween(3200, easing = LinearEasing)), label = "blink"
     )
     Column(Modifier.fillMaxWidth().height(245.dp)) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -581,8 +581,8 @@ private fun HologramView(listening: Boolean, thinking: Boolean, talking: Boolean
                 val cx = size.width * 0.5f
                 val cy = size.height * 0.46f
                 val scale = minOf(size.width * 0.39f, size.height * 0.40f)
-                val yaw = kotlin.math.sin(phase) * 0.13f + if (listening) kotlin.math.sin(phase * 2f) * 0.06f else 0f
-                val bob = kotlin.math.sin(phase * 1.7f) * 2.5f
+                val yaw = kotlin.math.sin(phase) * 0.34f + if (listening) kotlin.math.sin(phase * 2f) * 0.12f else 0f
+                val bob = kotlin.math.sin(phase * 1.7f) * 7f
                 val cyan = Color(0xFF42DFFF)
                 val bright = Color(0xFF8AFFFF)
                 fun point(u: Float, v: Float): Offset {
@@ -625,7 +625,7 @@ private fun HologramView(listening: Boolean, thinking: Boolean, talking: Boolean
                     }
                     drawPath(path, color, style = Stroke(width = width))
                 }
-                val blink = if (blinkPhase > 0.965f) 0.15f else 1f
+                val blink = if (blinkPhase > 0.92f) 0.08f else 1f
                 for (side in listOf(-1f, 1f)) {
                     val x = side * 0.31f
                     feature(listOf(x - 0.14f to 0.15f, x - 0.07f to (0.15f + 0.045f * blink), x to (0.15f + 0.055f * blink), x + 0.07f to (0.15f + 0.045f * blink), x + 0.14f to 0.15f), bright, 2.4f)
@@ -642,8 +642,8 @@ private fun HologramView(listening: Boolean, thinking: Boolean, talking: Boolean
                 feature(listOf(-0.30f to -0.78f, -0.27f to -1.05f, 0f to -1.12f, 0.27f to -1.05f, 0.30f to -0.78f), cyan, 1.2f)
                 // Floating particles
                 for (i in 0 until 36) {
-                    val px = ((i * 47f + phase * 17f) % size.width)
-                    val py = ((i * 31f - phase * 19f) % size.height + size.height) % size.height
+                    val px = ((i * 47f + phase * 29f) % size.width)
+                    val py = ((i * 31f - phase * 27f) % size.height + size.height) % size.height
                     drawCircle(cyan.copy(alpha = 0.35f), radius = 1.2f + (i % 3) * 0.45f, center = Offset(px, py))
                 }
                 // Horizontal moving hologram scan band
