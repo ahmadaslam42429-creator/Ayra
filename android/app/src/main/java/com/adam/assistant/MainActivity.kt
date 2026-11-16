@@ -24,6 +24,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -98,11 +108,7 @@ private fun AdamApp() {
     DisposableEffect(Unit) {
         val engine = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                tts?.language = when (language) {
-                    "Urdu" -> Locale("ur", "PK")
-                    "Hindi" -> Locale("hi", "IN")
-                    else -> Locale("en", "US")
-                }
+                configureMaleVoice(engine, language)
             }
         }
         tts = engine
@@ -404,37 +410,12 @@ private fun AdamApp() {
                 if (liveStatus != "Live voice is off") {
                     Text(liveStatus, Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp), color = Color(0xFF65E7F2), style = MaterialTheme.typography.labelMedium)
                 }
-                AndroidView(
-                    factory = { viewContext ->
-                        WebView(viewContext).apply {
-                            setBackgroundColor(android.graphics.Color.rgb(9, 13, 34))
-                            setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
-                            settings.javaScriptEnabled = true
-                            settings.domStorageEnabled = true
-                            settings.loadsImagesAutomatically = true
-                            settings.mediaPlaybackRequiresUserGesture = false
-                            webChromeClient = object : WebChromeClient() {
-                                override fun onConsoleMessage(message: ConsoleMessage): Boolean {
-                                    if (message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
-                                        liveStatus = "3D avatar: ${message.message().take(100)}"
-                                    }
-                                    return true
-                                }
-                            }
-                            webViewClient = object : WebViewClientCompat() {
-                                override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceErrorCompat) {
-                                    if (request.isForMainFrame) liveStatus = "3D avatar page failed to load: ${error.description}"
-                                }
-                            }
-                            val avatarHtml = viewContext.assets.open("avatar.html").bufferedReader().use { it.readText() }
-                            loadDataWithBaseURL("https://appassets.androidplatform.net/assets/", avatarHtml, "text/html", "UTF-8", null)
-                        }
-                    },
-                    update = { webView ->
-                        webView.evaluateJavascript("if (typeof window.setState === 'function') { window.setState(" + liveVoiceActive + ", " + busy + ", " + avatarTalking + "); }", null)
-                    },
-                    modifier = Modifier.fillMaxWidth().height(245.dp)
+                HologramView(
+                    listening = liveVoiceActive,
+                    thinking = busy,
+                    talking = avatarTalking
                 )
+
                 if (history.isEmpty()) {
                     Spacer(Modifier.height(56.dp))
                     Text("Hello, I'm ADAM", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF65E7F2))
@@ -495,11 +476,7 @@ private fun AdamApp() {
                 },
                 confirmButton = { TextButton(onClick = {
                     prefs.edit().remove("gemini_key").putString("language", language).putBoolean("speak", speakReplies).putBoolean("google_search", false).putBoolean("wake_word", wakeWordEnabled).apply()
-                    tts?.language = when (language) {
-                        "Urdu" -> Locale("ur", "PK")
-                        "Hindi" -> Locale("hi", "IN")
-                        else -> Locale("en", "US")
-                    }
+                    tts?.let { configureMaleVoice(it, language) }
                     showSettings = false
                 }) { Text("Save") } },
                 dismissButton = { TextButton(onClick = { showSettings = false }) { Text("Cancel") } }
@@ -565,3 +542,122 @@ private fun AdamApp() {
     }
 }
 
+
+
+private fun configureMaleVoice(engine: TextToSpeech, language: String) {
+    val locale = when (language) {
+        "Urdu" -> Locale("ur", "PK")
+        "Hindi" -> Locale("hi", "IN")
+        else -> Locale.US
+    }
+    engine.language = locale
+    val maleHints = listOf("male", "david", "mark", "alex", "daniel", "aaron", "george", "james", "tom", "matthew", "guy")
+    val matchingVoices = engine.voices.orEmpty().filter { it.locale.language == locale.language }
+    val maleVoice = matchingVoices.firstOrNull { voice ->
+        val voiceName = voice.name.lowercase(Locale.ROOT)
+        maleHints.any { hint -> voiceName.contains(hint) }
+    }
+    if (maleVoice != null) engine.voice = maleVoice
+}
+
+@Composable
+private fun HologramView(listening: Boolean, thinking: Boolean, talking: Boolean) {
+    val motion = rememberInfiniteTransition(label = "hologram-motion")
+    val phase by motion.animateFloat(
+        initialValue = 0f, targetValue = 6.28318f,
+        animationSpec = infiniteRepeatable(tween(9000, easing = LinearEasing)), label = "phase"
+    )
+    val scan by motion.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2600, easing = LinearEasing)), label = "scan"
+    )
+    val blinkPhase by motion.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(4200, easing = LinearEasing)), label = "blink"
+    )
+    Column(Modifier.fillMaxWidth().height(245.dp)) {
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            Canvas(Modifier.fillMaxSize()) {
+                val cx = size.width * 0.5f
+                val cy = size.height * 0.46f
+                val scale = minOf(size.width * 0.39f, size.height * 0.40f)
+                val yaw = kotlin.math.sin(phase) * 0.13f + if (listening) kotlin.math.sin(phase * 2f) * 0.06f else 0f
+                val bob = kotlin.math.sin(phase * 1.7f) * 2.5f
+                val cyan = Color(0xFF42DFFF)
+                val bright = Color(0xFF8AFFFF)
+                fun point(u: Float, v: Float): Offset {
+                    val y = v * 1.12f
+                    val width = kotlin.math.sqrt(maxOf(0.001f, 1f - v * v)) * (0.72f - 0.08f * v)
+                    val z = kotlin.math.sqrt(maxOf(0.001f, 1f - v * v)) *
+                        kotlin.math.sqrt(maxOf(0.02f, 1f - u * u)) * 0.62f
+                    val x = u * width
+                    val xx = x * kotlin.math.cos(yaw) + z * kotlin.math.sin(yaw)
+                    val zz = -x * kotlin.math.sin(yaw) + z * kotlin.math.cos(yaw)
+                    val perspective = 3.8f / (3.8f - zz)
+                    return Offset(cx + xx * scale * perspective, cy + bob - y * scale * perspective)
+                }
+                drawCircle(Color(0x2225DFFF), radius = scale * 1.12f, center = Offset(cx, cy))
+                // Wireframe latitude lines
+                for (row in 0..18) {
+                    val v = -0.94f + row * 0.104f
+                    val path = Path()
+                    for (col in 0..48) {
+                        val p = point(-0.99f + col * 0.04125f, v)
+                        if (col == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
+                    }
+                    drawPath(path, cyan.copy(alpha = 0.52f), style = Stroke(width = 1f))
+                }
+                // Wireframe meridians
+                for (col in 0..24) {
+                    val u = -0.98f + col * 0.0816f
+                    val path = Path()
+                    for (row in 0..38) {
+                        val p = point(u, -0.96f + row * 0.0505f)
+                        if (row == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
+                    }
+                    drawPath(path, cyan.copy(alpha = 0.46f), style = Stroke(width = 0.9f))
+                }
+                fun feature(points: List<Pair<Float, Float>>, color: Color = bright, width: Float = 2f) {
+                    val path = Path()
+                    points.forEachIndexed { index, pair ->
+                        val p = point(pair.first, pair.second)
+                        if (index == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
+                    }
+                    drawPath(path, color, style = Stroke(width = width))
+                }
+                val blink = if (blinkPhase > 0.965f) 0.15f else 1f
+                for (side in listOf(-1f, 1f)) {
+                    val x = side * 0.31f
+                    feature(listOf(x - 0.14f to 0.15f, x - 0.07f to (0.15f + 0.045f * blink), x to (0.15f + 0.055f * blink), x + 0.07f to (0.15f + 0.045f * blink), x + 0.14f to 0.15f), bright, 2.4f)
+                    feature(listOf(x - 0.13f to 0.27f, x to 0.30f, x + 0.13f to 0.27f), cyan, 1.1f)
+                    val eye = point(x, 0.16f)
+                    drawCircle(bright, radius = scale * 0.022f, center = eye)
+                }
+                feature(listOf(0f to 0.13f, 0f to -0.04f, -0.05f to -0.13f, 0f to -0.16f, 0.05f to -0.13f), bright, 1.6f)
+                feature(listOf(-0.10f to -0.19f, -0.04f to -0.21f, 0f to -0.20f, 0.04f to -0.21f, 0.10f to -0.19f), cyan, 1.2f)
+                val mouthOpen = if (talking) 0.035f + kotlin.math.abs(kotlin.math.sin(phase * 13f)) * 0.10f else 0.012f
+                feature(listOf(-0.19f to -0.34f, -0.10f to (-0.33f + mouthOpen), 0f to (-0.34f + mouthOpen * 1.2f), 0.10f to (-0.33f + mouthOpen), 0.19f to -0.34f), bright, 2f)
+                feature(listOf(-0.18f to -0.36f, -0.09f to (-0.37f - mouthOpen * 0.5f), 0f to (-0.38f - mouthOpen * 0.6f), 0.09f to (-0.37f - mouthOpen * 0.5f), 0.18f to -0.36f), cyan, 1.2f)
+                feature(listOf(-0.47f to -0.42f, -0.34f to -0.73f, 0f to -0.83f, 0.34f to -0.73f, 0.47f to -0.42f), cyan, 1f)
+                feature(listOf(-0.30f to -0.78f, -0.27f to -1.05f, 0f to -1.12f, 0.27f to -1.05f, 0.30f to -0.78f), cyan, 1.2f)
+                // Floating particles
+                for (i in 0 until 36) {
+                    val px = ((i * 47f + phase * 17f) % size.width)
+                    val py = ((i * 31f - phase * 19f) % size.height + size.height) % size.height
+                    drawCircle(cyan.copy(alpha = 0.35f), radius = 1.2f + (i % 3) * 0.45f, center = Offset(px, py))
+                }
+                // Horizontal moving hologram scan band
+                val scanY = scan * size.height
+                drawLine(Color.Transparent, Color(0x5538EAFF), Offset(0f, scanY), Offset(size.width, scanY), strokeWidth = 12f)
+                // Ground/orbit rings
+                drawOval(cyan.copy(alpha = 0.35f), topLeft = Offset(cx - scale * 0.72f, cy + scale * 0.68f), size = androidx.compose.ui.geometry.Size(scale * 1.44f, scale * 0.25f), style = Stroke(width = 1f))
+            }
+            Text(
+                text = when { talking -> "RESPONDING"; thinking -> "PROCESSING"; listening -> "LISTENING"; else -> "SYSTEM READY" },
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp),
+                color = Color(0xFF62FFF0),
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
