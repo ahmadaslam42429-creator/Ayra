@@ -8,8 +8,8 @@ class AdamScreenAccessibilityService : AccessibilityService() {
     companion object {
         @Volatile private var active: AdamScreenAccessibilityService? = null
 
-        fun performVoiceCommand(command: String): String =
-            active?.performCommand(command) ?: "ADAM app control is not connected. Open Device tools → Enable ADAM app control permission, then enable ADAM in Android Accessibility settings."
+        fun performVoiceCommand(command: String): String? =
+            active?.performCommand(command)
     }
 
     override fun onServiceConnected() {
@@ -48,7 +48,7 @@ class AdamScreenAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun performCommand(raw: String): String {
+    private fun performCommand(raw: String): String? {
         val command = raw.trim()
         val lower = command.lowercase()
         val protectedActions = listOf("send", "publish", "post", "delete", "remove", "pay", "purchase", "buy", "like", "share")
@@ -59,8 +59,7 @@ class AdamScreenAccessibilityService : AccessibilityService() {
             else "I can prepare the message or form, but you must review and confirm the final action yourself."
         }
 
-        val root = rootInActiveWindow
-            ?: return "ADAM is connected, but Android did not expose the current app screen. Try again after the screen finishes loading."
+        val root = rootInActiveWindow ?: return null
         try {
             if (lower in listOf("go back", "back", "واپس", "پیچھے", "वापस")) {
                 val ok = performGlobalAction(GLOBAL_ACTION_BACK)
@@ -100,7 +99,7 @@ class AdamScreenAccessibilityService : AccessibilityService() {
                 field.recycle()
                 return if (success) "Text entered. Please review it before sending or publishing." else "Android blocked text entry in that field."
             }
-            return "I didn't recognize that app-control command. Try: tap [button], type [text], scroll up/down, or go back."
+            return null
         } finally {
             root.recycle()
         }
