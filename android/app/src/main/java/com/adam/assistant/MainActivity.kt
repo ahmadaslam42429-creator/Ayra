@@ -562,60 +562,97 @@ private fun configureMaleVoice(engine: TextToSpeech, language: String) {
 
 @Composable
 private fun HologramView(listening: Boolean, thinking: Boolean, talking: Boolean) {
-    val motion = rememberInfiniteTransition(label = "hologram-motion")
+    val motion = rememberInfiniteTransition(label = "adam-hologram")
     val phase by motion.animateFloat(
         initialValue = 0f, targetValue = 6.28318f,
-        animationSpec = infiniteRepeatable(tween(9000, easing = LinearEasing)), label = "phase"
+        animationSpec = infiniteRepeatable(tween(4200, easing = LinearEasing)), label = "rotation"
+    )
+    val turn by motion.animateFloat(
+        initialValue = -0.72f, targetValue = 0.72f,
+        animationSpec = infiniteRepeatable(tween(2100, easing = LinearEasing), RepeatMode.Reverse),
+        label = "head-turn"
+    )
+    val bob by motion.animateFloat(
+        initialValue = -11f, targetValue = 11f,
+        animationSpec = infiniteRepeatable(tween(1750, easing = LinearEasing), RepeatMode.Reverse),
+        label = "float"
+    )
+    val drift by motion.animateFloat(
+        initialValue = -9f, targetValue = 9f,
+        animationSpec = infiniteRepeatable(tween(2900, easing = LinearEasing), RepeatMode.Reverse),
+        label = "drift"
     )
     val scan by motion.animateFloat(
         initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1700, easing = LinearEasing)), label = "scan"
+        animationSpec = infiniteRepeatable(tween(1600, easing = LinearEasing)), label = "scan"
     )
     val blinkPhase by motion.animateFloat(
         initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(3200, easing = LinearEasing)), label = "blink"
+        animationSpec = infiniteRepeatable(tween(3000, easing = LinearEasing)), label = "blink"
     )
-    Column(Modifier.fillMaxWidth().height(245.dp)) {
+    val pulse by motion.animateFloat(
+        initialValue = 0.65f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(950, easing = LinearEasing), RepeatMode.Reverse),
+        label = "glow"
+    )
+
+    Column(Modifier.fillMaxWidth().height(260.dp)) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             Canvas(Modifier.fillMaxSize()) {
-                val cx = size.width * 0.5f
+                val cx = size.width * 0.5f + drift
                 val cy = size.height * 0.46f
-                val scale = minOf(size.width * 0.39f, size.height * 0.40f)
-                val yaw = kotlin.math.sin(phase) * 0.34f + if (listening) kotlin.math.sin(phase * 2f) * 0.12f else 0f
-                val bob = kotlin.math.sin(phase * 1.7f) * 7f
+                val scale = minOf(size.width * 0.39f, size.height * 0.39f)
+                val yaw = turn + if (listening) kotlin.math.sin(phase * 2f) * 0.16f else 0f
+                val roll = kotlin.math.sin(phase * 0.65f) * 0.10f
                 val cyan = Color(0xFF42DFFF)
-                val bright = Color(0xFF8AFFFF)
+                val bright = Color(0xFF9BFFFF)
                 fun point(u: Float, v: Float): Offset {
-                    val y = v * 1.12f
-                    val width = kotlin.math.sqrt(maxOf(0.001f, 1f - v * v)) * (0.72f - 0.08f * v)
-                    val z = kotlin.math.sqrt(maxOf(0.001f, 1f - v * v)) *
-                        kotlin.math.sqrt(maxOf(0.02f, 1f - u * u)) * 0.62f
+                    val width = kotlin.math.sqrt(maxOf(0.001f, 1f - v * v)) * (0.76f - 0.07f * v)
+                    val depth = kotlin.math.sqrt(maxOf(0.001f, 1f - v * v)) *
+                        kotlin.math.sqrt(maxOf(0.02f, 1f - u * u)) * 0.66f
                     val x = u * width
-                    val xx = x * kotlin.math.cos(yaw) + z * kotlin.math.sin(yaw)
-                    val zz = -x * kotlin.math.sin(yaw) + z * kotlin.math.cos(yaw)
-                    val perspective = 3.8f / (3.8f - zz)
-                    return Offset(cx + xx * scale * perspective, cy + bob - y * scale * perspective)
+                    val rotatedX = x * kotlin.math.cos(yaw) + depth * kotlin.math.sin(yaw)
+                    val z = -x * kotlin.math.sin(yaw) + depth * kotlin.math.cos(yaw)
+                    val perspective = 3.6f / (3.6f - z)
+                    val localX = rotatedX * kotlin.math.cos(roll) - v * kotlin.math.sin(roll)
+                    val localY = rotatedX * kotlin.math.sin(roll) + v * kotlin.math.cos(roll)
+                    return Offset(
+                        cx + localX * scale * perspective,
+                        cy + bob - localY * scale * perspective
+                    )
                 }
-                drawCircle(Color(0x2225DFFF), radius = scale * 1.12f, center = Offset(cx, cy))
-                // Wireframe latitude lines
-                for (row in 0..18) {
-                    val v = -0.94f + row * 0.104f
+                drawCircle(Color(0x2225DFFF), radius = scale * 1.15f, center = Offset(cx, cy + bob * 0.25f))
+                // Moving halo rings around the floating head.
+                for (ring in 0..2) {
                     val path = Path()
-                    for (col in 0..48) {
-                        val p = point(-0.99f + col * 0.04125f, v)
+                    for (step in 0..80) {
+                        val a = step / 80f * 6.28318f + phase * (if (ring == 1) -0.7f else 0.45f)
+                        val rx = scale * (0.78f + ring * 0.13f)
+                        val ry = scale * (0.13f + ring * 0.025f)
+                        val p = Offset(cx + kotlin.math.cos(a) * rx, cy + scale * 0.78f + bob * 0.35f + kotlin.math.sin(a) * ry)
+                        if (step == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
+                    }
+                    drawPath(path, cyan.copy(alpha = 0.32f + ring * 0.08f), style = Stroke(width = 1.1f))
+                }
+                // Wireframe latitude lines.
+                for (row in 0..20) {
+                    val v = -0.96f + row * 0.096f
+                    val path = Path()
+                    for (col in 0..56) {
+                        val p = point(-0.99f + col * 0.03535f, v)
                         if (col == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
                     }
-                    drawPath(path, cyan.copy(alpha = 0.52f), style = Stroke(width = 1f))
+                    drawPath(path, cyan.copy(alpha = 0.38f * pulse), style = Stroke(width = 1f))
                 }
-                // Wireframe meridians
-                for (col in 0..24) {
-                    val u = -0.98f + col * 0.0816f
+                // Wireframe meridians.
+                for (col in 0..28) {
+                    val u = -0.98f + col * 0.07f
                     val path = Path()
-                    for (row in 0..38) {
-                        val p = point(u, -0.96f + row * 0.0505f)
+                    for (row in 0..44) {
+                        val p = point(u, -0.98f + row * 0.0445f)
                         if (row == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
                     }
-                    drawPath(path, cyan.copy(alpha = 0.46f), style = Stroke(width = 0.9f))
+                    drawPath(path, cyan.copy(alpha = 0.42f * pulse), style = Stroke(width = 0.9f))
                 }
                 fun feature(points: List<Pair<Float, Float>>, color: Color = bright, width: Float = 2f) {
                     val path = Path()
@@ -623,34 +660,38 @@ private fun HologramView(listening: Boolean, thinking: Boolean, talking: Boolean
                         val p = point(pair.first, pair.second)
                         if (index == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
                     }
-                    drawPath(path, color, style = Stroke(width = width))
+                    drawPath(path, color.copy(alpha = pulse), style = Stroke(width = width))
                 }
-                val blink = if (blinkPhase > 0.92f) 0.08f else 1f
+                val blink = if (blinkPhase > 0.94f) 0.025f else 1f
                 for (side in listOf(-1f, 1f)) {
                     val x = side * 0.31f
-                    feature(listOf(x - 0.14f to 0.15f, x - 0.07f to (0.15f + 0.045f * blink), x to (0.15f + 0.055f * blink), x + 0.07f to (0.15f + 0.045f * blink), x + 0.14f to 0.15f), bright, 2.4f)
-                    feature(listOf(x - 0.13f to 0.27f, x to 0.30f, x + 0.13f to 0.27f), cyan, 1.1f)
-                    val eye = point(x, 0.16f)
-                    drawCircle(bright, radius = scale * 0.022f, center = eye)
+                    feature(listOf(
+                        (x - 0.14f) to 0.15f, (x - 0.07f) to (0.15f + 0.045f * blink),
+                        x to (0.15f + 0.055f * blink), (x + 0.07f) to (0.15f + 0.045f * blink),
+                        (x + 0.14f) to 0.15f
+                    ), bright, 2.5f)
+                    feature(listOf((x - 0.13f) to 0.27f, x to 0.30f, (x + 0.13f) to 0.27f), cyan, 1.2f)
+                    drawCircle(bright, radius = scale * 0.022f, center = point(x, 0.16f))
                 }
-                feature(listOf(0f to 0.13f, 0f to -0.04f, -0.05f to -0.13f, 0f to -0.16f, 0.05f to -0.13f), bright, 1.6f)
-                feature(listOf(-0.10f to -0.19f, -0.04f to -0.21f, 0f to -0.20f, 0.04f to -0.21f, 0.10f to -0.19f), cyan, 1.2f)
-                val mouthOpen = if (talking) 0.035f + kotlin.math.abs(kotlin.math.sin(phase * 13f)) * 0.10f else 0.012f
-                feature(listOf(-0.19f to -0.34f, -0.10f to (-0.33f + mouthOpen), 0f to (-0.34f + mouthOpen * 1.2f), 0.10f to (-0.33f + mouthOpen), 0.19f to -0.34f), bright, 2f)
-                feature(listOf(-0.18f to -0.36f, -0.09f to (-0.37f - mouthOpen * 0.5f), 0f to (-0.38f - mouthOpen * 0.6f), 0.09f to (-0.37f - mouthOpen * 0.5f), 0.18f to -0.36f), cyan, 1.2f)
+                feature(listOf(0f to 0.13f, 0f to -0.04f, -0.05f to -0.13f, 0f to -0.16f, 0.05f to -0.13f), bright, 1.8f)
+                val mouthOpen = if (talking) 0.035f + kotlin.math.abs(kotlin.math.sin(phase * 15f)) * 0.13f else 0.012f
+                feature(listOf(
+                    -0.19f to -0.34f, -0.10f to (-0.33f + mouthOpen),
+                    0f to (-0.34f + mouthOpen * 1.2f), 0.10f to (-0.33f + mouthOpen),
+                    0.19f to -0.34f
+                ), bright, 2.4f)
+                feature(listOf(-0.18f to -0.37f, -0.09f to -0.39f, 0f to -0.40f, 0.09f to -0.39f, 0.18f to -0.37f), cyan, 1.2f)
                 feature(listOf(-0.47f to -0.42f, -0.34f to -0.73f, 0f to -0.83f, 0.34f to -0.73f, 0.47f to -0.42f), cyan, 1f)
                 feature(listOf(-0.30f to -0.78f, -0.27f to -1.05f, 0f to -1.12f, 0.27f to -1.05f, 0.30f to -0.78f), cyan, 1.2f)
-                // Floating particles
-                for (i in 0 until 36) {
-                    val px = ((i * 47f + phase * 29f) % size.width)
-                    val py = ((i * 31f - phase * 27f) % size.height + size.height) % size.height
-                    drawCircle(cyan.copy(alpha = 0.35f), radius = 1.2f + (i % 3) * 0.45f, center = Offset(px, py))
+                // Particles travel independently around the avatar.
+                for (i in 0 until 42) {
+                    val px = ((i * 43f + phase * 31f) % size.width)
+                    val py = ((i * 29f - phase * 25f) % size.height + size.height) % size.height
+                    drawCircle(cyan.copy(alpha = 0.42f), radius = 1.2f + (i % 3) * 0.5f, center = Offset(px, py))
                 }
-                // Horizontal moving hologram scan band
                 val scanY = scan * size.height
-                drawLine(color = Color(0x5538EAFF), start = Offset(0f, scanY), end = Offset(size.width, scanY), strokeWidth = 12f)
-                // Ground/orbit rings
-                drawOval(cyan.copy(alpha = 0.35f), topLeft = Offset(cx - scale * 0.72f, cy + scale * 0.68f), size = androidx.compose.ui.geometry.Size(scale * 1.44f, scale * 0.25f), style = Stroke(width = 1f))
+                drawLine(Color(0x6642EFFF), Offset(0f, scanY), Offset(size.width, scanY), strokeWidth = 10f)
+                drawLine(Color(0xAA8AFFFF), Offset(size.width * 0.12f, scanY), Offset(size.width * 0.88f, scanY), strokeWidth = 1.2f)
             }
             Text(
                 text = when { talking -> "RESPONDING"; thinking -> "PROCESSING"; listening -> "LISTENING"; else -> "SYSTEM READY" },
