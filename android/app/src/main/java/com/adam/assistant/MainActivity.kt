@@ -281,7 +281,6 @@ private fun AdamApp() {
                 Intent(android.provider.Settings.ACTION_SETTINGS)
             else -> null
         }
-        history.add(ChatLine(message, true))
         val launched = if (target != null) {
             runCatching { context.startActivity(target) }.isSuccess
         } else {
@@ -303,9 +302,13 @@ private fun AdamApp() {
                 persist()
                 return true
             }
-            history.removeAt(history.lastIndex)
             return false
         }
+        // A normal message is not a device-control failure. Let sendMessage()
+        // pass it through to the AI backend instead of showing a false Android error.
+        if (!launched && target == null) return false
+
+        history.add(ChatLine(message, true))
         history.add(ChatLine(if (launched) {
             if (target == null) "Opening $command." else "Opening the requested Android control. You can confirm or change it in Android."
         } else "Android could not open that control on this device.", false))
