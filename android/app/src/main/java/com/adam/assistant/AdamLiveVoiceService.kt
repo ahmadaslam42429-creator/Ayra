@@ -99,12 +99,14 @@ class AdamLiveVoiceService : Service() {
         val prefs = getSharedPreferences("adam", MODE_PRIVATE)
         val savedVoiceName = prefs.getString("tts_voice", null)
         val available = engine.voices.orEmpty().filter { it.locale.language == locale.language }
-        val maleHints = listOf("male", "david", "mark", "daniel", "aaron", "george", "james", "tom", "matthew", "guy", "baritone", "_m", "-m")
-        val maleVoice = available.firstOrNull { voice ->
-            val name = voice.name.lowercase(Locale.ROOT)
-            maleHints.any { hint -> name.contains(hint) }
-        }
-        val selected = maleVoice ?: available.firstOrNull { it.name == savedVoiceName }
+        val maleHints = listOf("male", "male_", "masculine", "david", "mark", "daniel", "aaron", "george", "james", "tom", "matthew", "guy", "baritone", "-tpm", "_tpm", "#male")
+        // Prefer the exact voice saved by the main chat settings so Live Voice and
+        // ordinary chat speak with the same voice instead of selecting independently.
+        val selected = available.firstOrNull { it.name == savedVoiceName }
+            ?: available.firstOrNull { voice ->
+                val name = voice.name.lowercase(Locale.ROOT)
+                maleHints.any { hint -> name.contains(hint) }
+            }
         if (selected != null) {
             runCatching { engine.voice = selected }
         }
