@@ -104,7 +104,7 @@ class AdamLiveVoiceService : Service() {
             val name = voice.name.lowercase(Locale.ROOT)
             maleHints.any { hint -> name.contains(hint) }
         }
-        val selected = available.firstOrNull { it.name == savedVoiceName } ?: maleVoice
+        val selected = maleVoice ?: available.firstOrNull { it.name == savedVoiceName }
         if (selected != null) {
             runCatching { engine.voice = selected }
         }
