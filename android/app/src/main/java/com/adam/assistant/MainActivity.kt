@@ -115,8 +115,10 @@ private fun AdamApp() {
             if (status == TextToSpeech.SUCCESS) {
                 tts?.let { readyEngine ->
                     ttsVoices = readyEngine.voices.orEmpty().filter { it.locale.language == ttsLocale(language).language }.sortedBy { it.name }
-                    val savedVoice = selectedVoiceName.takeIf { name -> ttsVoices.any { it.name == name } }
-                    selectedVoiceName = configureMaleVoice(readyEngine, language, savedVoice) ?: ""
+                    // On startup, replace any previously saved voice with the best
+                    // male-identified voice available; do not silently retain an old female voice.
+                    selectedVoiceName = configureMaleVoice(readyEngine, language, null) ?: ""
+                    prefs.edit().putString("tts_voice", selectedVoiceName).apply()
                 }
             }
         }
@@ -775,10 +777,10 @@ private fun configureMaleVoice(engine: TextToSpeech, language: String, preferred
         val name = voice.name.lowercase(Locale.ROOT)
         maleHints.any { hint -> name.contains(hint) }
     }
-    // Respect an explicitly selected installed voice. Automatic mode still
-    // prefers a voice whose engine name identifies it as male.
-    val chosen = matchingVoices.firstOrNull { it.name == preferredVoiceName }
-        ?: matchingVoices.firstOrNull(isMaleHinted)
+    // Prioritize a voice whose engine name identifies it as male.
+    // Only use a saved/selected voice if the engine exposes no male-identified voice.
+    val chosen = matchingVoices.firstOrNull(isMaleHinted)
+        ?: matchingVoices.firstOrNull { it.name == preferredVoiceName }
     if (chosen != null) {
         engine.voice = chosen
         engine.setPitch(1.0f)
