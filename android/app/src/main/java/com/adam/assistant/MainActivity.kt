@@ -301,14 +301,30 @@ private fun AdamApp() {
         }
 
         if (launched && appNavigation != null && !navigationTarget.isNullOrBlank()) {
+            val targetLabel = navigationTarget.trim().removeSuffix(" chat").trim()
             history.add(ChatLine(message, true))
-            history.add(ChatLine("Android accepted the app launch. ADAM is attempting to open '$navigationTarget' after the app loads…", false))
+            history.add(ChatLine("WhatsApp opened. Waiting for its screen and '$targetLabel' to become available…", false))
             persist()
-            mainHandler.postDelayed({
-                val result = AdamScreenAccessibilityService.performVoiceCommand("tap $navigationTarget")
-                history.add(ChatLine("Navigation result: $result", false))
-                persist()
-            }, 1600L)
+
+            // WhatsApp can take longer than a fixed delay to render its chat list.
+            // Retry the visible-screen lookup instead of silently stopping after one tap.
+            fun attemptNavigation(attempt: Int) {
+                mainHandler.postDelayed({
+                    val result = AdamScreenAccessibilityService.performVoiceCommand("tap $targetLabel")
+                    val stillLoading = result.startsWith("I can't find the") ||
+                        result.startsWith("ADAM is connected, but Android did not expose")
+                    if (stillLoading && attempt < 12) {
+                        attemptNavigation(attempt + 1)
+                    } else {
+                        val finalResult = if (stillLoading) {
+                            "I opened WhatsApp, but couldn't find '$targetLabel' after waiting. Make sure the chat is visible, then ask ADAM to tap '$targetLabel'."
+                        } else result
+                        history.add(ChatLine("WhatsApp navigation: $finalResult", false))
+                        persist()
+                    }
+                }, if (attempt == 0) 700L else 600L)
+            }
+            attemptNavigation(0)
             return true
         }
         // Only explicit on-screen control instructions may reach Accessibility.
