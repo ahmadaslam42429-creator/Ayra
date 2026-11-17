@@ -8,8 +8,9 @@ class AdamScreenAccessibilityService : AccessibilityService() {
     companion object {
         @Volatile private var active: AdamScreenAccessibilityService? = null
 
-        fun performVoiceCommand(command: String): String? =
+        fun performVoiceCommand(command: String): String =
             active?.performCommand(command)
+                ?: "ADAM app control is not connected. Open Device tools → Enable ADAM app control permission, then enable ADAM in Android Accessibility settings."
     }
 
     override fun onServiceConnected() {
@@ -59,7 +60,8 @@ class AdamScreenAccessibilityService : AccessibilityService() {
             else "I can prepare the message or form, but you must review and confirm the final action yourself."
         }
 
-        val root = rootInActiveWindow ?: return null
+        val root = rootInActiveWindow
+            ?: return "ADAM is connected, but Android did not expose this app's screen. Wait for it to finish loading and try again."
         try {
             if (lower in listOf("go back", "back", "واپس", "پیچھے", "वापस")) {
                 val ok = performGlobalAction(GLOBAL_ACTION_BACK)
@@ -99,7 +101,7 @@ class AdamScreenAccessibilityService : AccessibilityService() {
                 field.recycle()
                 return if (success) "Text entered. Please review it before sending or publishing." else "Android blocked text entry in that field."
             }
-            return null
+            return "I didn't recognize that app-control command. Try: tap [visible label], type [text], scroll up/down, or go back."
         } finally {
             root.recycle()
         }
