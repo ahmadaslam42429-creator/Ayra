@@ -598,16 +598,51 @@ private fun AdamApp() {
                                 onValueChange = {}, readOnly = true, modifier = Modifier.menuAnchor()
                             )
                             ExposedDropdownMenu(expanded = voiceMenuExpanded, onDismissRequest = { voiceMenuExpanded = false }) {
-                                DropdownMenuItem(text = { Text("Automatic (prefer male)") }, onClick = { selectedVoiceName = ""; voiceMenuExpanded = false })
+                                DropdownMenuItem(text = { Text("Automatic (prefer male)") }, onClick = {
+                                    selectedVoiceName = ""
+                                    tts?.let { engine ->
+                                        selectedVoiceName = configureMaleVoice(engine, language, null) ?: ""
+                                        ttsVoices = engine.voices.orEmpty().filter { it.locale.language == ttsLocale(language).language }.sortedBy { it.name }
+                                    }
+                                    voiceMenuExpanded = false
+                                })
                                 ttsVoices.forEach { voice ->
                                     DropdownMenuItem(
                                         text = { Text(voice.name + if (voice.isNetworkConnectionRequired) " (online)" else "") },
-                                        onClick = { selectedVoiceName = voice.name; voiceMenuExpanded = false }
+                                        onClick = {
+                                            selectedVoiceName = voice.name
+                                            tts?.let { engine ->
+                                                runCatching {
+                                                    engine.setLanguage(ttsLocale(language))
+                                                    engine.voice = voice
+                                                    engine.setPitch(1.0f)
+                                                    engine.setSpeechRate(0.94f)
+                                                }
+                                            }
+                                            voiceMenuExpanded = false
+                                        }
                                     )
                                 }
                             }
                         }
-                        Text("Choose a voice installed by your Android text-to-speech engine. Male voices depend on the voices your phone provides.", style = MaterialTheme.typography.bodySmall, color = Color.LightGray)
+                        Text("Select a voice, then test it. Available voices depend on your Android TTS engine; install additional English voices in your phone's Text-to-speech settings if needed.", style = MaterialTheme.typography.bodySmall, color = Color.LightGray)
+                        TextButton(onClick = {
+                            tts?.let { engine ->
+                                val selected = ttsVoices.firstOrNull { it.name == selectedVoiceName }
+                                if (selected != null) {
+                                    runCatching {
+                                        engine.setLanguage(ttsLocale(language))
+                                        engine.voice = selected
+                                        engine.setPitch(1.0f)
+                                        engine.setSpeechRate(0.94f)
+                                        engine.speak("Hello. I am ADAM. This is my selected voice.", TextToSpeech.QUEUE_FLUSH, null, "adam-voice-test")
+                                    }
+                                } else {
+                                    configureMaleVoice(engine, language, null)
+                                    engine.speak("Hello. I am ADAM. This is my automatic voice.", TextToSpeech.QUEUE_FLUSH, null, "adam-voice-test")
+                                }
+                            }
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Test selected voice") }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(checked = speakReplies, onCheckedChange = { speakReplies = it })
                             Text("Speak AI replies aloud")
@@ -637,7 +672,17 @@ private fun AdamApp() {
                     prefs.edit().remove("gemini_key").putString("language", language).putBoolean("speak", speakReplies).putBoolean("google_search", false).putBoolean("wake_word", wakeWordEnabled).putString("tts_voice", selectedVoiceName).apply()
                     tts?.let { engine ->
                         ttsVoices = engine.voices.orEmpty().filter { it.locale.language == ttsLocale(language).language }.sortedBy { it.name }
-                        selectedVoiceName = configureMaleVoice(engine, language, selectedVoiceName.takeIf { name -> ttsVoices.any { it.name == name } }) ?: ""
+                        val selected = ttsVoices.firstOrNull { it.name == selectedVoiceName }
+                        if (selected != null) {
+                            runCatching {
+                                engine.setLanguage(ttsLocale(language))
+                                engine.voice = selected
+                                engine.setPitch(1.0f)
+                                engine.setSpeechRate(0.94f)
+                            }
+                        } else {
+                            selectedVoiceName = configureMaleVoice(engine, language, null) ?: ""
+                        }
                     }
                     showSettings = false
                 }) { Text("Save") } },
@@ -721,7 +766,7 @@ private fun configureMaleVoice(engine: TextToSpeech, language: String, preferred
         return null
     }
     val matchingVoices = engine.voices.orEmpty()
-        .filter { it.locale.language == locale.language && !it.isNetworkConnectionRequired }
+        .filter { it.locale.language == locale.language }
     // Never keep a saved voice unless it also matches a male-voice hint.
     // Android does not expose a reliable gender field for TTS voices, so use
     // explicit voice-name hints and otherwise report that a male voice is unavailable.
