@@ -88,10 +88,28 @@ class AdamLiveVoiceService : Service() {
 
     private fun configureTts() {
         val engine = tts ?: return
-        val result = engine.setLanguage(speechLocale())
+        val locale = speechLocale()
+        val result = engine.setLanguage(locale)
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
             engine.setLanguage(Locale.US)
         }
+
+        // The live service owns a separate TTS instance. Apply the same voice
+        // selected in ADAM's settings instead of silently using the engine default.
+        val prefs = getSharedPreferences("adam", MODE_PRIVATE)
+        val savedVoiceName = prefs.getString("tts_voice", null)
+        val available = engine.voices.orEmpty().filter { it.locale.language == locale.language }
+        val maleHints = listOf("male", "david", "mark", "daniel", "aaron", "george", "james", "tom", "matthew", "guy", "baritone", "_m", "-m")
+        val maleVoice = available.firstOrNull { voice ->
+            val name = voice.name.lowercase(Locale.ROOT)
+            maleHints.any { hint -> name.contains(hint) }
+        }
+        val selected = available.firstOrNull { it.name == savedVoiceName } ?: maleVoice
+        if (selected != null) {
+            runCatching { engine.voice = selected }
+        }
+        engine.setPitch(1.0f)
+        engine.setSpeechRate(0.94f)
     }
 
     private fun installTtsListener() {
