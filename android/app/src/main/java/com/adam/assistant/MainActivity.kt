@@ -405,7 +405,16 @@ private fun AdamApp() {
                 persist()
                 if (speakReplies) {
                     avatarTalking = true
-                    tts?.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "adam-reply")
+                    tts?.let { engine ->
+                        // Re-apply ADAM's male-preferred voice immediately before
+                        // every ordinary chat reply, not only during app startup.
+                        val activeVoice = configureMaleVoice(engine, language, selectedVoiceName)
+                        if (!activeVoice.isNullOrBlank()) {
+                            selectedVoiceName = activeVoice
+                            prefs.edit().putString("tts_voice", activeVoice).apply()
+                        }
+                        engine.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "adam-reply")
+                    }
                 }
             }
         }
@@ -772,7 +781,7 @@ private fun configureMaleVoice(engine: TextToSpeech, language: String, preferred
     // Never keep a saved voice unless it also matches a male-voice hint.
     // Android does not expose a reliable gender field for TTS voices, so use
     // explicit voice-name hints and otherwise report that a male voice is unavailable.
-    val maleHints = listOf("male", "david", "mark", "daniel", "aaron", "george", "james", "tom", "matthew", "guy", "baritone", "-m", "_m", "male")
+    val maleHints = listOf("male", "male_", "masculine", "david", "mark", "daniel", "aaron", "george", "james", "tom", "matthew", "guy", "baritone", "-tpm", "_tpm", "#male")
     val isMaleHinted: (android.speech.tts.Voice) -> Boolean = { voice ->
         val name = voice.name.lowercase(Locale.ROOT)
         maleHints.any { hint -> name.contains(hint) }
