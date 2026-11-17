@@ -788,8 +788,9 @@ private fun configureMaleVoice(engine: TextToSpeech, language: String, preferred
     }
     // Prioritize a voice whose engine name identifies it as male.
     // Only use a saved/selected voice if the engine exposes no male-identified voice.
-    val chosen = matchingVoices.firstOrNull(isMaleHinted)
-        ?: matchingVoices.firstOrNull { it.name == preferredVoiceName }
+    // Reuse the exact voice already selected for ADAM Live Voice whenever it is available.
+    val chosen = matchingVoices.firstOrNull { it.name == preferredVoiceName }
+        ?: matchingVoices.firstOrNull(isMaleHinted)
     if (chosen != null) {
         engine.voice = chosen
         engine.setPitch(1.0f)
