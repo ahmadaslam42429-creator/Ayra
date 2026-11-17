@@ -245,6 +245,15 @@ private fun AdamApp() {
             return true
         }
 
+        // Support an explicit app launch followed by in-app navigation.
+        // Example: "open WhatsApp and navigate to Sister".
+        val appNavigation = Regex(
+            "^(?:open|launch|start)\\s+(.+?)\\s+(?:and|then)\\s+(?:navigate(?:\\s+to)?|go\\s+to|open\\s+chat|open)\\s+(.+)$",
+            RegexOption.IGNORE_CASE
+        ).find(message.trim())
+        val appNameForNavigation = appNavigation?.groupValues?.get(1)?.trim()
+        val navigationTarget = appNavigation?.groupValues?.get(2)?.trim()
+
         val target: Intent? = when {
             listOf("wifi settings", "wi-fi settings", "open wifi", "open wi-fi").any { command.contains(it) } ->
                 Intent(android.provider.Settings.ACTION_WIFI_SETTINGS)
@@ -281,10 +290,24 @@ private fun AdamApp() {
                 Intent(android.provider.Settings.ACTION_SETTINGS)
             else -> null
         }
-        val launched = if (target != null) {
+        val launched = if (appNavigation != null && !appNameForNavigation.isNullOrBlank()) {
+            launchInstalledApp("open $appNameForNavigation")
+        } else if (target != null) {
             runCatching { context.startActivity(target) }.isSuccess
         } else {
             launchInstalledApp(command)
+        }
+
+        if (launched && appNavigation != null && !navigationTarget.isNullOrBlank()) {
+            history.add(ChatLine(message, true))
+            history.add(ChatLine("Android accepted the app launch. ADAM is attempting to open '$navigationTarget' after the app loads…", false))
+            persist()
+            mainHandler.postDelayed({
+                val result = AdamScreenAccessibilityService.performVoiceCommand("tap $navigationTarget")
+                history.add(ChatLine("Navigation result: $result", false))
+                persist()
+            }, 1600L)
+            return true
         }
         // Only explicit on-screen control instructions may reach Accessibility.
         // Ordinary chat/questions must always fall through to the AI chat request.
@@ -707,7 +730,9 @@ private fun configureMaleVoice(engine: TextToSpeech, language: String, preferred
         val name = voice.name.lowercase(Locale.ROOT)
         maleHints.any { hint -> name.contains(hint) }
     }
-    val chosen = matchingVoices.firstOrNull { it.name == preferredVoiceName && isMaleHinted(it) }
+    // Respect an explicitly selected installed voice. Automatic mode still
+    // prefers a voice whose engine name identifies it as male.
+    val chosen = matchingVoices.firstOrNull { it.name == preferredVoiceName }
         ?: matchingVoices.firstOrNull(isMaleHinted)
     if (chosen != null) {
         engine.voice = chosen
