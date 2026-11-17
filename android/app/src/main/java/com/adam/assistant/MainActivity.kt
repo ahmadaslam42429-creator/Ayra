@@ -332,8 +332,12 @@ private fun AdamApp() {
         }
         requestMessages.put(JSONObject()
             .put("role", "system")
-            .put("content", "You are ADAM, a helpful friendly AI companion. $languageInstruction Keep answers concise and useful. Device actions: open [app name]; search [query]; search Google [query]; search YouTube [query]; SMS to [phone number] [message]; share text [draft]; prepare post [draft]; upload photo. SMS and social sharing open a review screen; never claim a message was sent or a post uploaded until the user completes it in the target app. For app navigation, use tap [visible label], type [text], scroll up, scroll down, and go back when the user asks. If screen text is supplied, use it only as context for the user’s question; mention when the screen text is insufficient.\n\nVisible screen text (captured by the user-enabled Accessibility service): ${prefs.getString("screen_context", "").orEmpty().take(10000)}"))
-        history.takeLast(14).forEach { line ->
+            .put("content", "You are ADAM, a helpful friendly AI companion. $languageInstruction Keep answers concise and useful. For ordinary greetings, questions, and conversation, answer naturally and directly. Do not respond with Android control errors, and do not claim that Android could not open a control unless the user explicitly asked to open a device setting and that local action actually failed. Device actions are handled separately by the app; never invent a device-action failure as a chat response. If screen text is supplied, use it only as context for the user's question; mention when the screen text is insufficient.\n\nVisible screen text (captured by the user-enabled Accessibility service): ${prefs.getString("screen_context", "").orEmpty().take(10000)}"))
+        // Exclude stale false-control replies from older app versions so they
+        // cannot be fed back to the model and repeated as if they were valid answers.
+        history.filterNot { line ->
+            !line.fromUser && line.text.trim().equals("Android could not open that control on this device.", ignoreCase = true)
+        }.takeLast(14).forEach { line ->
             requestMessages.put(JSONObject()
                 .put("role", if (line.fromUser) "user" else "assistant")
                 .put("content", line.text))
